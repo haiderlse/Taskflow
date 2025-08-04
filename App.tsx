@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Project, User } from './types';
-import { mockApi } from './services/mockApi';
+import { enhancedApi as mockApi } from './services/enhancedApi';
 import TopBar from './components/Header';
 import HomePage from './components/ProjectDashboard';
 import ProjectView from './components/KanbanBoard';

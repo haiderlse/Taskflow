@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Task, Comment, User } from '../types';
-import { mockApi } from '../services/mockApi';
-import { XIcon, CalendarIcon, UserIcon } from './icons';
+import { enhancedApi } from '../services/enhancedApi';
+import TimeTracking from './TimeTracking';
+import { XIcon, CalendarIcon, UserIcon, ClockIcon } from './icons';
 
 interface TaskModalProps {
   task: Task;
@@ -16,13 +17,16 @@ const TaskModal: React.FC<TaskModalProps> = ({ task, users, currentUser, onClose
   const [description, setDescription] = useState(task.description);
   const [assigneeId, setAssigneeId] = useState(task.assigneeId);
   const [dueDate, setDueDate] = useState(task.dueDate ? task.dueDate.toISOString().split('T')[0] : '');
+  const [startDate, setStartDate] = useState(task.startDate ? task.startDate.toISOString().split('T')[0] : '');
+  const [priority, setPriority] = useState(task.priority || 'medium');
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
   const [isCommenting, setIsCommenting] = useState(false);
+  const [activeTab, setActiveTab] = useState<'details' | 'time' | 'comments'>('details');
 
   useEffect(() => {
-    mockApi.getCommentsForTask(task.id).then(setComments);
-    const unsubscribe = mockApi.subscribeToComments(task.id, setComments);
+    enhancedApi.getCommentsForTask(task.id).then(setComments);
+    const unsubscribe = enhancedApi.subscribeToComments(task.id, setComments);
     return () => unsubscribe();
   }, [task.id]);
 
@@ -34,7 +38,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ task, users, currentUser, onClose
     e.preventDefault();
     if (newComment.trim() && !isCommenting) {
       setIsCommenting(true);
-      await mockApi.addComment(task.id, currentUser.uid, newComment.trim());
+      await enhancedApi.addComment(task.id, currentUser.uid, newComment.trim());
       setNewComment('');
       setIsCommenting(false);
     }
@@ -46,108 +50,227 @@ const TaskModal: React.FC<TaskModalProps> = ({ task, users, currentUser, onClose
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4" onClick={onClose}>
-      <div className="bg-slate-50 rounded-lg shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
         <div className="p-6 border-b">
           <input
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onBlur={() => handleUpdate({ title })}
-            className="w-full text-2xl font-bold bg-transparent focus:outline-none focus:bg-white rounded px-2 py-1 -m-2"
+            className="w-full text-2xl font-bold bg-transparent focus:outline-none focus:bg-gray-50 rounded px-2 py-1 -m-2"
             placeholder="Task Title"
           />
+          
+          {/* Tabs */}
+          <div className="flex space-x-4 mt-4 border-b">
+            <button
+              onClick={() => setActiveTab('details')}
+              className={`pb-2 border-b-2 ${activeTab === 'details' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500'}`}
+            >
+              Details
+            </button>
+            <button
+              onClick={() => setActiveTab('time')}
+              className={`pb-2 border-b-2 ${activeTab === 'time' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500'}`}
+            >
+              Time Tracking
+            </button>
+            <button
+              onClick={() => setActiveTab('comments')}
+              className={`pb-2 border-b-2 ${activeTab === 'comments' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500'}`}
+            >
+              Comments ({comments.length})
+            </button>
+          </div>
         </div>
 
+        {/* Content */}
         <div className="p-6 flex-grow overflow-y-auto">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-             <div className="flex items-center space-x-3 p-3 bg-white rounded-lg border border-slate-200">
-               <UserIcon className="w-5 h-5 text-slate-500 flex-shrink-0" />
-               <div className="flex-grow">
-                  <label htmlFor="assignee" className="block text-xs font-medium text-slate-500">Assignee</label>
-                  <select
-                    id="assignee"
-                    value={assigneeId || ''}
-                    onChange={(e) => {
-                        const newId = e.target.value || null;
-                        setAssigneeId(newId);
-                        handleUpdate({ assigneeId: newId });
-                    }}
-                    className="w-full bg-transparent text-sm font-semibold text-slate-800 focus:outline-none -ml-1 border-none"
-                  >
-                    <option value="">Unassigned</option>
-                    {users.map(user => <option key={user.uid} value={user.uid}>{user.displayName}</option>)}
-                  </select>
-               </div>
-             </div>
-             <div className="flex items-center space-x-3 p-3 bg-white rounded-lg border border-slate-200">
-               <CalendarIcon className="w-5 h-5 text-slate-500 flex-shrink-0" />
-               <div className="flex-grow">
-                 <label htmlFor="dueDate" className="block text-xs font-medium text-slate-500">Due Date</label>
-                 <input
-                    type="date"
-                    id="dueDate"
-                    value={dueDate}
-                    onChange={(e) => {
-                        setDueDate(e.target.value);
-                        handleUpdate({ dueDate: e.target.value ? new Date(e.target.value) : null });
-                    }}
-                    className="w-full bg-transparent text-sm font-semibold text-slate-800 focus:outline-none border-none p-0"
-                 />
-               </div>
-             </div>
-          </div>
-          
-          <h3 className="text-lg font-semibold text-slate-800 mb-2">Description</h3>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            onBlur={() => handleUpdate({ description })}
-            className="w-full h-32 p-2 border rounded-md focus:ring-primary focus:border-primary"
-            placeholder="Add a more detailed description..."
-          />
-          
-          <h3 className="text-lg font-semibold text-slate-800 mt-6 mb-4">Activity</h3>
-          <div className="space-y-4">
-            {comments.map(comment => (
-              <div key={comment.id} className="flex items-start space-x-3">
-                <div className="bg-primary text-white rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm">
-                  {getUserDisplayName(comment.userId).charAt(0)}
-                </div>
-                <div className="flex-1">
-                  <div className="bg-white p-3 rounded-lg rounded-tl-none border">
-                    <p className="font-semibold text-slate-700 text-sm">{getUserDisplayName(comment.userId)}</p>
-                    <p className="text-slate-600">{comment.text}</p>
+          {activeTab === 'details' && (
+            <div className="space-y-6">
+              {/* Task Details Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Assignee */}
+                <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                  <UserIcon className="w-5 h-5 text-gray-500 flex-shrink-0" />
+                  <div className="flex-grow">
+                    <label htmlFor="assignee" className="block text-xs font-medium text-gray-500">Assignee</label>
+                    <select
+                      id="assignee"
+                      value={assigneeId || ''}
+                      onChange={(e) => {
+                          const newId = e.target.value || null;
+                          setAssigneeId(newId);
+                          handleUpdate({ assigneeId: newId });
+                      }}
+                      className="w-full bg-transparent text-sm font-semibold text-gray-800 focus:outline-none border-none"
+                    >
+                      <option value="">Unassigned</option>
+                      {users.map(user => <option key={user.uid} value={user.uid}>{user.displayName}</option>)}
+                    </select>
                   </div>
-                   <p className="text-xs text-slate-400 mt-1">{new Date(comment.createdAt).toLocaleString()}</p>
+                </div>
+
+                {/* Priority */}
+                <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                  <div className="w-5 h-5 flex-shrink-0">
+                    <div className={`w-full h-full rounded ${
+                      priority === 'critical' ? 'bg-red-500' :
+                      priority === 'high' ? 'bg-orange-500' :
+                      priority === 'medium' ? 'bg-blue-500' :
+                      'bg-gray-500'
+                    }`}></div>
+                  </div>
+                  <div className="flex-grow">
+                    <label htmlFor="priority" className="block text-xs font-medium text-gray-500">Priority</label>
+                    <select
+                      id="priority"
+                      value={priority}
+                      onChange={(e) => {
+                          setPriority(e.target.value as any);
+                          handleUpdate({ priority: e.target.value as any });
+                      }}
+                      className="w-full bg-transparent text-sm font-semibold text-gray-800 focus:outline-none border-none"
+                    >
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                      <option value="critical">Critical</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Start Date */}
+                <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                  <CalendarIcon className="w-5 h-5 text-gray-500 flex-shrink-0" />
+                  <div className="flex-grow">
+                    <label htmlFor="startDate" className="block text-xs font-medium text-gray-500">Start Date</label>
+                    <input
+                       type="date"
+                       id="startDate"
+                       value={startDate}
+                       onChange={(e) => {
+                           setStartDate(e.target.value);
+                           handleUpdate({ startDate: e.target.value ? new Date(e.target.value) : null });
+                       }}
+                       className="w-full bg-transparent text-sm font-semibold text-gray-800 focus:outline-none border-none p-0"
+                    />
+                  </div>
+                </div>
+
+                {/* Due Date */}
+                <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                  <CalendarIcon className="w-5 h-5 text-gray-500 flex-shrink-0" />
+                  <div className="flex-grow">
+                    <label htmlFor="dueDate" className="block text-xs font-medium text-gray-500">Due Date</label>
+                    <input
+                       type="date"
+                       id="dueDate"
+                       value={dueDate}
+                       onChange={(e) => {
+                           setDueDate(e.target.value);
+                           handleUpdate({ dueDate: e.target.value ? new Date(e.target.value) : null });
+                       }}
+                       className="w-full bg-transparent text-sm font-semibold text-gray-800 focus:outline-none border-none p-0"
+                    />
+                  </div>
                 </div>
               </div>
-            ))}
-          </div>
 
-          <form onSubmit={handleCommentSubmit} className="mt-6 flex items-start space-x-3">
-             <div className="bg-primary text-white rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm flex-shrink-0">
-                {currentUser.displayName.charAt(0)}
-             </div>
-            <div className="flex-1">
-              <textarea
-                value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                className="w-full p-2 border rounded-md focus:ring-primary focus:border-primary"
-                placeholder="Add a comment..."
-                rows={2}
-              />
-              <button
-                type="submit"
-                disabled={!newComment.trim() || isCommenting}
-                className="mt-2 px-4 py-2 bg-primary text-white rounded-md hover:bg-primary-hover disabled:bg-slate-300 disabled:cursor-not-allowed"
-              >
-                {isCommenting ? 'Saving...' : 'Save'}
-              </button>
+              {/* Time Summary */}
+              {task.timeTracked > 0 && (
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <div className="flex items-center space-x-2">
+                    <ClockIcon className="w-5 h-5 text-blue-600" />
+                    <span className="text-sm font-medium text-blue-800">
+                      Total time tracked: {Math.floor(task.timeTracked / 60)}h {task.timeTracked % 60}m
+                    </span>
+                  </div>
+                  {task.estimatedTime && (
+                    <div className="mt-2">
+                      <div className="flex justify-between text-sm text-blue-700">
+                        <span>Progress</span>
+                        <span>{Math.round((task.timeTracked / task.estimatedTime) * 100)}%</span>
+                      </div>
+                      <div className="w-full bg-blue-200 rounded-full h-2 mt-1">
+                        <div 
+                          className="bg-blue-600 h-2 rounded-full" 
+                          style={{ width: `${Math.min((task.timeTracked / task.estimatedTime) * 100, 100)}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {/* Description */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-2">Description</h3>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  onBlur={() => handleUpdate({ description })}
+                  className="w-full h-32 p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Add a more detailed description..."
+                />
+              </div>
             </div>
-          </form>
+          )}
+
+          {activeTab === 'time' && (
+            <TimeTracking
+              task={task}
+              currentUser={currentUser}
+              onTimeUpdate={(newTime) => handleUpdate({ timeTracked: newTime })}
+            />
+          )}
+
+          {activeTab === 'comments' && (
+            <div className="space-y-6">
+              <div className="space-y-4">
+                {comments.map(comment => (
+                  <div key={comment.id} className="flex items-start space-x-3">
+                    <div className="bg-blue-600 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm">
+                      {getUserDisplayName(comment.userId).charAt(0)}
+                    </div>
+                    <div className="flex-1">
+                      <div className="bg-gray-50 p-3 rounded-lg rounded-tl-none">
+                        <p className="font-semibold text-gray-700 text-sm">{getUserDisplayName(comment.userId)}</p>
+                        <p className="text-gray-600 mt-1">{comment.text}</p>
+                      </div>
+                       <p className="text-xs text-gray-400 mt-1">{new Date(comment.createdAt).toLocaleString()}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <form onSubmit={handleCommentSubmit} className="flex items-start space-x-3">
+                 <div className="bg-blue-600 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm flex-shrink-0">
+                    {currentUser.displayName.charAt(0)}
+                 </div>
+                <div className="flex-1">
+                  <textarea
+                    value={newComment}
+                    onChange={(e) => setNewComment(e.target.value)}
+                    className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Add a comment..."
+                    rows={2}
+                  />
+                  <button
+                    type="submit"
+                    disabled={!newComment.trim() || isCommenting}
+                    className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                  >
+                    {isCommenting ? 'Saving...' : 'Add Comment'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
         </div>
 
-        <button onClick={onClose} className="absolute top-4 right-4 text-slate-500 hover:text-slate-800">
+        <button onClick={onClose} className="absolute top-4 right-4 text-gray-500 hover:text-gray-800">
           <XIcon className="w-6 h-6" />
         </button>
       </div>

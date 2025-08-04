@@ -2,16 +2,18 @@
 import React, { useState, useEffect } from 'react';
 import { Project, User } from './types';
 import { enhancedApi as mockApi } from './services/enhancedApi';
+import { AuthService } from './services/authService';
 import TopBar from './components/Header';
 import HomePage from './components/ProjectDashboard';
 import ProjectView from './components/KanbanBoard';
 import AuthPage from './components/AuthPage';
 import MyTasksPage from './components/MyTasksPage';
 import InboxPage from './components/InboxPage';
-import ReportingPage from './components/ReportingPage';
+import ReportingPage from './components/CorporateReportingPage';
 import PortfoliosPage from './components/PortfoliosPage';
 import GoalsPage from './components/GoalsPage';
-import TeamPage from './components/TeamPage';
+import TeamPage from './components/OrganizationManagement';
+import ApprovalsPage from './components/ApprovalsPage';
 import CreateModal from './components/CreateModal';
 import { 
   MenuIcon, 
@@ -23,11 +25,12 @@ import {
   PortfolioIcon,
   GoalsIcon,
   UsersIcon,
-  ChevronRightIcon
+  ChevronRightIcon,
+  CheckCircleIcon as ApprovalIcon
 } from './components/icons';
 
 // --- Types --- //
-type ViewType = 'home' | 'my-tasks' | 'inbox' | 'reporting' | 'portfolios' | 'goals' | 'team' | 'project';
+type ViewType = 'home' | 'my-tasks' | 'inbox' | 'reporting' | 'portfolios' | 'goals' | 'team' | 'project' | 'approvals';
 interface ViewState {
   type: ViewType;
   id?: string; // for project id
@@ -76,6 +79,7 @@ const Sidebar: React.FC<SidebarProps> = ({ projects, onNavigate, currentView, on
           <NavItem icon={<HomeIcon className="w-5 h-5" />} label="Home" selected={currentView.type === 'home'} onClick={() => onNavigate({ type: 'home'})} />
           <NavItem icon={<CheckCircleIcon className="w-5 h-5" />} label="My tasks" selected={currentView.type === 'my-tasks'} onClick={() => onNavigate({ type: 'my-tasks'})} />
           <NavItem icon={<InboxIcon className="w-5 h-5" />} label="Inbox" selected={currentView.type === 'inbox'} onClick={() => onNavigate({ type: 'inbox'})} />
+          <NavItem icon={<ApprovalIcon className="w-5 h-5" />} label="Approvals" selected={currentView.type === 'approvals'} onClick={() => onNavigate({ type: 'approvals'})} />
           
           <SectionHeader label="Insights" onAdd={onShowCreateModal} />
           <NavItem icon={<ReportingIcon className="w-5 h-5" />} label="Reporting" selected={currentView.type === 'reporting'} onClick={() => onNavigate({type: 'reporting'})} />
@@ -124,9 +128,16 @@ const App: React.FC = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   useEffect(() => {
-    const loadInitialData = async () => {
+    const initializeApp = async () => {
       setLoading(true);
       try {
+        // First check if user has a valid session
+        const sessionUser = await AuthService.checkSession();
+        if (sessionUser) {
+          setCurrentUser(sessionUser);
+        }
+
+        // Load initial data
         const [allUsers, allProjects] = await Promise.all([mockApi.getUsers(), mockApi.getProjects()]);
         setUsers(allUsers);
         setProjects(allProjects);
@@ -136,7 +147,7 @@ const App: React.FC = () => {
         setLoading(false);
       }
     };
-    loadInitialData();
+    initializeApp();
   }, []);
 
   const handleLogin = (user: User) => {
@@ -145,6 +156,16 @@ const App: React.FC = () => {
         setCurrentUser(user);
         setAuthLoading(false);
     }, 500);
+  };
+
+  const handleLogout = async () => {
+    try {
+      await AuthService.logout();
+      setCurrentUser(null);
+      setCurrentView({ type: 'home' });
+    } catch (error) {
+      console.error("Logout failed:", error);
+    }
   };
   
   const handleCreateProject = async () => {
@@ -181,10 +202,16 @@ const App: React.FC = () => {
                 return project ? <ProjectView project={project} currentUser={currentUser} users={users} /> : <HomePage user={currentUser} projects={projects} users={users} onCreateProject={handleCreateProject} />;
             case 'my-tasks': return <MyTasksPage />;
             case 'inbox': return <InboxPage />;
-            case 'reporting': return <ReportingPage />;
+            case 'approvals': return <ApprovalsPage currentUser={currentUser} users={users} />;
+            case 'reporting': return <ReportingPage currentUser={currentUser} users={users} />;
             case 'portfolios': return <PortfoliosPage />;
             case 'goals': return <GoalsPage />;
-            case 'team': return <TeamPage />;
+            case 'team': return <TeamPage currentUser={currentUser} users={users} onUserUpdate={async (userId, updates) => {
+              await mockApi.updateUser(userId, updates);
+              // Refresh users list
+              const updatedUsers = await mockApi.getUsers();
+              setUsers(updatedUsers);
+            }} />;
             default:
                 return <HomePage user={currentUser} projects={projects} users={users} onCreateProject={handleCreateProject} />;
         }
@@ -202,7 +229,7 @@ const App: React.FC = () => {
                 onCreateProject={handleCreateProject}
             />
             <div className="flex-1 flex flex-col bg-main-bg overflow-hidden">
-                <TopBar user={currentUser} />
+                <TopBar user={currentUser} onLogout={handleLogout} />
                 <main className="flex-1 overflow-y-auto">
                     {renderAppContent()}
                 </main>

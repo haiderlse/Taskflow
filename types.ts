@@ -18,6 +18,22 @@ export interface User {
   isActive: boolean;
   lastLogin?: Date;
   createdAt: Date;
+  passwordHash?: string;
+  managerId?: string; // For approval hierarchy
+  approvalLimit?: number; // Maximum amount/value this user can approve
+}
+
+export interface AuthCredentials {
+  email: string;
+  password: string;
+}
+
+export interface RegisterData {
+  email: string;
+  password: string;
+  displayName: string;
+  department?: string;
+  role?: UserRole;
 }
 
 export interface Project {
@@ -199,6 +215,12 @@ export interface ApprovalRequest {
   approvals: Approval[];
   createdAt: Date;
   dueDate?: Date;
+  approvalType: 'sequential' | 'parallel' | 'any_one';
+  requiredApprovals: number;
+  escalationPath?: string[]; // User IDs for escalation
+  estimatedValue?: number; // For financial approvals
+  priority: Priority;
+  currentApproverIndex?: number; // For sequential approvals
 }
 
 export interface Approval {
@@ -206,6 +228,37 @@ export interface Approval {
   status: 'approved' | 'rejected';
   comment?: string;
   timestamp: Date;
+  signatureHash?: string; // For audit trail
+}
+
+export interface ApprovalHierarchy {
+  id: string;
+  name: string;
+  description?: string;
+  rules: ApprovalRule[];
+  isActive: boolean;
+  createdBy: string;
+  createdAt: Date;
+}
+
+export interface ApprovalRule {
+  id: string;
+  condition: ApprovalCondition;
+  approvers: ApprovalApprover[];
+  escalationTimeHours?: number;
+}
+
+export interface ApprovalCondition {
+  field: 'priority' | 'estimatedValue' | 'taskType' | 'department' | 'projectId';
+  operator: 'equals' | 'greater_than' | 'less_than' | 'in' | 'contains';
+  value: any;
+}
+
+export interface ApprovalApprover {
+  type: 'user' | 'role' | 'manager' | 'department_head';
+  identifier: string; // user ID, role name, or department name
+  isRequired: boolean;
+  order?: number; // For sequential approvals
 }
 
 export interface Attachment {

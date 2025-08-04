@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Project, Task, User, ColumnId } from '../types';
-import { mockApi } from '../services/mockApi';
+import { enhancedApi } from '../services/enhancedApi';
 import TaskModal from './TaskModal';
+import CalendarView from './CalendarView';
+import TimelineView from './TimelineView';
+import TimeTracking from './TimeTracking';
 import {
   ListIcon,
   BoardIcon,
@@ -22,21 +25,221 @@ import {
   OptionsIcon,
   SearchIcon,
   UserIcon as AssigneeIcon,
-  CheckCircleIcon
+  CheckCircleIcon,
+  ClockIcon
 } from './icons';
 
-// --- Placeholder View ---
-const PlaceholderView = ({ viewName }: { viewName: string }) => (
-    <div className="flex items-center justify-center h-full bg-gray-50/50">
-        <div className="text-center p-8 bg-white rounded-lg shadow-sm border">
-            <h2 className="text-2xl font-semibold text-gray-700">{viewName}</h2>
-            <p className="text-gray-500 mt-2 max-w-md">
-                This is a placeholder for the {viewName}.
-                The full functionality for this view has not been implemented yet.
-            </p>
-        </div>
+// --- Board View Component ---
+interface ProjectBoardViewProps {
+  project: Project;
+  tasks: Task[];
+  users: User[];
+  onTaskClick: (task: Task) => void;
+  onTaskUpdate: (taskId: string, updates: Partial<Task>) => void;
+  onTaskCreate: (title: string, projectId: string, status: ColumnId) => Promise<void>;
+}
+
+const ProjectBoardView: React.FC<ProjectBoardViewProps> = ({ 
+  project, 
+  tasks, 
+  users, 
+  onTaskClick, 
+  onTaskUpdate, 
+  onTaskCreate 
+}) => {
+  const [newTaskInputs, setNewTaskInputs] = useState<Record<ColumnId, boolean>>({
+    'To Do': false,
+    'In Progress': false,
+    'Done': false
+  });
+  const [newTaskTitles, setNewTaskTitles] = useState<Record<ColumnId, string>>({
+    'To Do': '',
+    'In Progress': '',
+    'Done': ''
+  });
+
+  const columns: ColumnId[] = ['To Do', 'In Progress', 'Done'];
+  
+  const getTasksForColumn = (column: ColumnId) => {
+    return tasks.filter(task => task.status === column).sort((a, b) => a.order - b.order);
+  };
+
+  const getAssignee = (assigneeId: string | null) => {
+    return users.find(u => u.uid === assigneeId);
+  };
+
+  const handleCreateTask = async (column: ColumnId) => {
+    const title = newTaskTitles[column].trim();
+    if (!title) return;
+
+    try {
+      await onTaskCreate(title, project.id, column);
+      setNewTaskTitles(prev => ({ ...prev, [column]: '' }));
+      setNewTaskInputs(prev => ({ ...prev, [column]: false }));
+    } catch (error) {
+      console.error('Failed to create task:', error);
+    }
+  };
+
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'critical': return 'border-l-red-500';
+      case 'high': return 'border-l-orange-500';
+      case 'medium': return 'border-l-blue-500';
+      case 'low': return 'border-l-gray-500';
+      default: return 'border-l-gray-500';
+    }
+  };
+
+  const formatTimeTracked = (minutes: number) => {
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+  };
+
+  return (
+    <div className="flex h-full gap-4 p-4 overflow-x-auto">
+      {columns.map(column => {
+        const columnTasks = getTasksForColumn(column);
+        return (
+          <div key={column} className="flex-shrink-0 w-80 bg-gray-50 rounded-lg">
+            {/* Column Header */}
+            <div className="p-4 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-gray-900">{column}</h3>
+                <div className="flex items-center space-x-2">
+                  <span className="text-sm text-gray-500">{columnTasks.length}</span>
+                  <button
+                    onClick={() => setNewTaskInputs(prev => ({ ...prev, [column]: true }))}
+                    className="p-1 hover:bg-gray-200 rounded"
+                  >
+                    <PlusIcon className="w-4 h-4 text-gray-400" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Tasks */}
+            <div className="p-2 space-y-2 max-h-[calc(100vh-200px)] overflow-y-auto">
+              {columnTasks.map(task => {
+                const assignee = getAssignee(task.assigneeId);
+                return (
+                  <div
+                    key={task.id}
+                    onClick={() => onTaskClick(task)}
+                    className={`bg-white p-3 rounded-lg border border-gray-200 cursor-pointer hover:shadow-md transition-shadow ${getPriorityColor(task.priority)} border-l-4`}
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <h4 className="text-sm font-medium text-gray-900 line-clamp-2">
+                        {task.title}
+                      </h4>
+                      {task.priority && task.priority !== 'medium' && (
+                        <div className={`ml-2 px-2 py-1 rounded text-xs font-medium ${
+                          task.priority === 'critical' ? 'bg-red-100 text-red-800' :
+                          task.priority === 'high' ? 'bg-orange-100 text-orange-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {task.priority}
+                        </div>
+                      )}
+                    </div>
+
+                    {task.description && (
+                      <p className="text-xs text-gray-600 mb-2 line-clamp-2">
+                        {task.description}
+                      </p>
+                    )}
+
+                    <div className="flex items-center justify-between text-xs text-gray-500">
+                      <div className="flex items-center space-x-2">
+                        {task.dueDate && (
+                          <div className="flex items-center space-x-1">
+                            <CalendarIcon className="w-3 h-3" />
+                            <span>{new Date(task.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                          </div>
+                        )}
+                        {task.timeTracked > 0 && (
+                          <div className="flex items-center space-x-1">
+                            <ClockIcon className="w-3 h-3" />
+                            <span>{formatTimeTracked(task.timeTracked)}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {assignee && (
+                        <div
+                          title={assignee.displayName}
+                          className="w-6 h-6 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-800 font-bold text-xs"
+                        >
+                          {assignee.displayName.charAt(0)}
+                        </div>
+                      )}
+                    </div>
+
+                    {task.tags && task.tags.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {task.tags.slice(0, 3).map(tag => (
+                          <span
+                            key={tag}
+                            className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                        {task.tags.length > 3 && (
+                          <span className="text-xs text-gray-500">+{task.tags.length - 3}</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Add Task Input */}
+              {newTaskInputs[column] && (
+                <div className="bg-white p-3 rounded-lg border border-gray-200">
+                  <input
+                    type="text"
+                    placeholder="Enter task title..."
+                    value={newTaskTitles[column]}
+                    onChange={(e) => setNewTaskTitles(prev => ({ ...prev, [column]: e.target.value }))}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleCreateTask(column);
+                      } else if (e.key === 'Escape') {
+                        setNewTaskInputs(prev => ({ ...prev, [column]: false }));
+                        setNewTaskTitles(prev => ({ ...prev, [column]: '' }));
+                      }
+                    }}
+                    onBlur={() => {
+                      if (newTaskTitles[column].trim()) {
+                        handleCreateTask(column);
+                      } else {
+                        setNewTaskInputs(prev => ({ ...prev, [column]: false }));
+                      }
+                    }}
+                    className="w-full text-sm border-0 focus:ring-0 focus:outline-none"
+                    autoFocus
+                  />
+                </div>
+              )}
+
+              {/* Add Task Button */}
+              {!newTaskInputs[column] && (
+                <button
+                  onClick={() => setNewTaskInputs(prev => ({ ...prev, [column]: true }))}
+                  className="w-full p-3 text-left text-sm text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  + Add a task
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
-);
+  );
+};
 
 // --- List View Component ---
 interface ProjectListViewProps {
@@ -97,10 +300,11 @@ const ProjectListView: React.FC<ProjectListViewProps> = ({ tasks, users, project
       {/* Task List */}
       <div className="flex-1 overflow-y-auto">
           <div className="p-1">
-              <div className="grid grid-cols-[minmax(0,_1fr)_150px_150px_40px] gap-4 text-xs text-subtle-text font-medium border-b pb-2 px-3 sticky top-0 bg-white z-10">
+              <div className="grid grid-cols-[minmax(0,_1fr)_150px_150px_100px_40px] gap-4 text-xs text-subtle-text font-medium border-b pb-2 px-3 sticky top-0 bg-white z-10">
                   <span className="pl-8">Name</span>
                   <span>Assignee</span>
                   <span>Due date</span>
+                  <span>Time tracked</span>
                   <button className="text-gray-400 hover:text-dark-text"><PlusIcon className="w-4 h-4"/></button>
               </div>
               
@@ -108,7 +312,7 @@ const ProjectListView: React.FC<ProjectListViewProps> = ({ tasks, users, project
                 {sortedTasks.map(task => {
                     const assignee = getAssignee(task.assigneeId);
                     return (
-                      <div key={task.id} onClick={() => onTaskClick(task)} className="grid grid-cols-[minmax(0,_1fr)_150px_150px_40px] gap-4 items-center group cursor-pointer hover:bg-gray-50 px-3 py-1.5">
+                      <div key={task.id} onClick={() => onTaskClick(task)} className="grid grid-cols-[minmax(0,_1fr)_150px_150px_100px_40px] gap-4 items-center group cursor-pointer hover:bg-gray-50 px-3 py-1.5">
                           <div className="flex items-center space-x-3">
                               <button onClick={(e) => {
                                 e.stopPropagation();
@@ -117,6 +321,15 @@ const ProjectListView: React.FC<ProjectListViewProps> = ({ tasks, users, project
                                 <CheckCircleIcon className="w-5 h-5 text-gray-300 group-hover/btn:text-green-500 transition-colors"/>
                               </button>
                               <span className="truncate text-sm py-1">{task.title}</span>
+                              {task.priority && task.priority !== 'medium' && (
+                                <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                  task.priority === 'critical' ? 'bg-red-100 text-red-800' :
+                                  task.priority === 'high' ? 'bg-orange-100 text-orange-800' :
+                                  'bg-gray-100 text-gray-800'
+                                }`}>
+                                  {task.priority}
+                                </span>
+                              )}
                           </div>
                           <div className="flex items-center justify-start">
                               {assignee ? (
@@ -130,13 +343,23 @@ const ProjectListView: React.FC<ProjectListViewProps> = ({ tasks, users, project
                                     <span className="text-sm text-gray-600">{new Date(task.dueDate).toLocaleDateString(undefined, {month: 'short', day: 'numeric' })}</span>
                               ) : <CalendarIcon className="w-7 h-7 p-1 text-gray-300 border-2 border-dashed rounded-full" />}
                           </div>
+                          <div className="flex items-center space-x-1">
+                              {task.timeTracked > 0 ? (
+                                <div className="flex items-center space-x-1 text-sm text-gray-600">
+                                  <ClockIcon className="w-4 h-4" />
+                                  <span>{Math.floor(task.timeTracked / 60)}h {task.timeTracked % 60}m</span>
+                                </div>
+                              ) : (
+                                <ClockIcon className="w-7 h-7 p-1 text-gray-300 border-2 border-dashed rounded-full" />
+                              )}
+                          </div>
                           <div></div>
                       </div>
                     )
                 })}
 
                 {isAddingTask && (
-                  <div className="grid grid-cols-[minmax(0,_1fr)_150px_150px_40px] gap-4 items-center px-3 py-1.5">
+                <div className="grid grid-cols-[minmax(0,_1fr)_150px_150px_100px_40px] gap-4 items-center px-3 py-1.5">
                       <div className="flex items-center space-x-3">
                         <CheckCircleIcon className="w-5 h-5 text-gray-300 flex-shrink-0"/>
                         <input 
@@ -159,7 +382,7 @@ const ProjectListView: React.FC<ProjectListViewProps> = ({ tasks, users, project
                     {completedTasks.map(task => {
                         const assignee = getAssignee(task.assigneeId);
                         return (
-                          <div key={task.id} onClick={() => onTaskClick(task)} className="grid grid-cols-[minmax(0,_1fr)_150px_150px_40px] gap-4 items-center group cursor-pointer hover:bg-gray-50 px-3 py-1.5 text-gray-500">
+                          <div key={task.id} onClick={() => onTaskClick(task)} className="grid grid-cols-[minmax(0,_1fr)_150px_150px_100px_40px] gap-4 items-center group cursor-pointer hover:bg-gray-50 px-3 py-1.5 text-gray-500">
                               <div className="flex items-center space-x-3">
                                   <button onClick={(e) => {
                                       e.stopPropagation();
@@ -180,6 +403,16 @@ const ProjectListView: React.FC<ProjectListViewProps> = ({ tasks, users, project
                                   {task.dueDate ? (
                                         <span className="text-sm line-through">{new Date(task.dueDate).toLocaleDateString(undefined, {month: 'short', day: 'numeric' })}</span>
                                   ) : <CalendarIcon className="w-7 h-7 p-1 text-gray-300 border-2 border-dashed rounded-full" />}
+                              </div>
+                              <div className="flex items-center space-x-1">
+                                  {task.timeTracked > 0 ? (
+                                    <div className="flex items-center space-x-1 text-sm opacity-70">
+                                      <ClockIcon className="w-4 h-4" />
+                                      <span>{Math.floor(task.timeTracked / 60)}h {task.timeTracked % 60}m</span>
+                                    </div>
+                                  ) : (
+                                    <ClockIcon className="w-7 h-7 p-1 text-gray-300 border-2 border-dashed rounded-full" />
+                                  )}
                               </div>
                               <div></div>
                           </div>
@@ -215,13 +448,13 @@ const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, users }
 
   useEffect(() => {
     setLoading(true);
-    mockApi.getTasksForProject(project.id)
+    enhancedApi.getTasksForProject(project.id)
       .then(tasks => {
         setTasks(tasks.sort((a, b) => a.order - b.order));
       })
       .finally(() => setLoading(false));
 
-    const unsubscribe = mockApi.subscribeToTasks(project.id, (updatedTasks) => {
+    const unsubscribe = enhancedApi.subscribeToTasks(project.id, (updatedTasks) => {
       setTasks(updatedTasks.sort((a, b) => a.order - b.order));
     });
 
@@ -230,7 +463,7 @@ const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, users }
 
   const handleTaskUpdate = useCallback(async (taskId: string, updates: Partial<Task>) => {
     try {
-      await mockApi.updateTask(taskId, updates);
+      await enhancedApi.updateTask(taskId, updates);
       if (selectedTask && selectedTask.id === taskId) {
         setSelectedTask(prev => prev ? { ...prev, ...updates } : null);
       }
@@ -241,7 +474,7 @@ const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, users }
 
   const handleTaskCreate = useCallback(async (title: string, projectId: string, status: ColumnId) => {
     try {
-        await mockApi.createTask(title, projectId, status);
+        await enhancedApi.createTask(title, projectId, status);
     } catch (error) {
         console.error("Failed to create task:", error);
         throw error; // Re-throw to be caught by caller
@@ -270,13 +503,31 @@ const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, users }
                 onTaskUpdate={handleTaskUpdate}
                 onTaskCreate={handleTaskCreate}
             />;
-        case 'Board': return <PlaceholderView viewName="Board View" />;
-        case 'Timeline': return <PlaceholderView viewName="Timeline View" />;
-        case 'Dashboard': return <PlaceholderView viewName="Dashboard View" />;
-        case 'Gantt': return <PlaceholderView viewName="Gantt Chart View" />;
-        case 'Calendar': return <PlaceholderView viewName="Calendar View" />;
-        case 'Note': return <PlaceholderView viewName="Note View" />;
-        case 'Workload': return <PlaceholderView viewName="Workload View" />;
+        case 'Board': 
+            return <ProjectBoardView 
+                project={project}
+                tasks={tasks}
+                users={users}
+                onTaskClick={setSelectedTask}
+                onTaskUpdate={handleTaskUpdate}
+                onTaskCreate={handleTaskCreate}
+            />;
+        case 'Timeline': 
+            return <TimelineView 
+                project={project}
+                currentUser={currentUser}
+                users={users}
+            />;
+        case 'Calendar': 
+            return <CalendarView 
+                project={project}
+                currentUser={currentUser}
+                users={users}
+            />;
+        case 'Dashboard': return <div className="flex items-center justify-center h-full"><span className="text-gray-500">Dashboard View - Coming Soon</span></div>;
+        case 'Gantt': return <div className="flex items-center justify-center h-full"><span className="text-gray-500">Gantt Chart View - Coming Soon</span></div>;
+        case 'Note': return <div className="flex items-center justify-center h-full"><span className="text-gray-500">Note View - Coming Soon</span></div>;
+        case 'Workload': return <div className="flex items-center justify-center h-full"><span className="text-gray-500">Workload View - Coming Soon</span></div>;
         default:
             return <ProjectListView
                 project={project}

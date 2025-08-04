@@ -9,10 +9,10 @@ import ProjectView from './components/KanbanBoard';
 import AuthPage from './components/AuthPage';
 import MyTasksPage from './components/MyTasksPage';
 import InboxPage from './components/InboxPage';
-import ReportingPage from './components/ReportingPage';
+import ReportingPage from './components/CorporateReportingPage';
 import PortfoliosPage from './components/PortfoliosPage';
 import GoalsPage from './components/GoalsPage';
-import TeamPage from './components/TeamPage';
+import TeamPage from './components/OrganizationManagement';
 import ApprovalsPage from './components/ApprovalsPage';
 import CreateModal from './components/CreateModal';
 import { 
@@ -203,10 +203,15 @@ const App: React.FC = () => {
             case 'my-tasks': return <MyTasksPage />;
             case 'inbox': return <InboxPage />;
             case 'approvals': return <ApprovalsPage currentUser={currentUser} users={users} />;
-            case 'reporting': return <ReportingPage />;
+            case 'reporting': return <ReportingPage currentUser={currentUser} users={users} />;
             case 'portfolios': return <PortfoliosPage />;
             case 'goals': return <GoalsPage />;
-            case 'team': return <TeamPage />;
+            case 'team': return <TeamPage currentUser={currentUser} users={users} onUserUpdate={async (userId, updates) => {
+              await mockApi.updateUser(userId, updates);
+              // Refresh users list
+              const updatedUsers = await mockApi.getUsers();
+              setUsers(updatedUsers);
+            }} />;
             default:
                 return <HomePage user={currentUser} projects={projects} users={users} onCreateProject={handleCreateProject} />;
         }

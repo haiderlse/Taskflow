@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Project, User } from './types';
 import { enhancedApi as mockApi } from './services/enhancedApi';
 import { AuthService } from './services/authService';
+import { ToastProvider } from './utils/ux';
 import TopBar from './components/Header';
 import HomePage from './components/ProjectDashboard';
 import ProjectView from './components/KanbanBoard';
@@ -235,7 +236,11 @@ const App: React.FC = () => {
     );
   };
 
-  return <>{renderContent()}</>;
+  return (
+    <ToastProvider>
+      {renderContent()}
+    </ToastProvider>
+  );
 };
 
 export default App;

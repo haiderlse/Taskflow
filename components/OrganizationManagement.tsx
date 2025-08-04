@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { User, ApprovalHierarchy } from '../types';
 import { enhancedApi } from '../services/enhancedApi';
 import { ApprovalService } from '../services/approvalService';
+import DeleteUserButton from './DeleteUserButton';
 import { 
   UsersIcon, 
   PlusIcon, 
@@ -155,7 +156,20 @@ const OrganizationManagement: React.FC<OrganizationManagementProps> = ({
                     </button>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    <button className="text-blue-600 hover:text-blue-900">Edit</button>
+                    <div className="flex items-center space-x-2">
+                      <button className="text-blue-600 hover:text-blue-900">Edit</button>
+                      <DeleteUserButton 
+                        user={user}
+                        currentUser={currentUser}
+                        onUserDeleted={(deletedUserId) => {
+                          // Remove user from local state
+                          const updatedUsers = users.filter(u => u.uid !== deletedUserId);
+                          // In a real app, this would be handled by the parent component
+                          // For now, we'll trigger a page refresh to see the updated list
+                          window.location.reload();
+                        }}
+                      />
+                    </div>
                   </td>
                 </tr>
               );

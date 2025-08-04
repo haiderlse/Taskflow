@@ -29,7 +29,10 @@ const userSchema = new mongoose.Schema({
   workload: { type: Number, default: 40 },
   isActive: { type: Boolean, default: true },
   lastLogin: Date,
-  createdAt: { type: Date, default: Date.now }
+  createdAt: { type: Date, default: Date.now },
+  passwordHash: String,
+  managerId: String,
+  approvalLimit: Number
 });
 
 // Project Schema
@@ -101,10 +104,17 @@ const taskSchema = new mongoose.Schema({
       userId: String,
       status: { type: String, enum: ['approved', 'rejected'] },
       comment: String,
-      timestamp: { type: Date, default: Date.now }
+      timestamp: { type: Date, default: Date.now },
+      signatureHash: String
     }],
     createdAt: { type: Date, default: Date.now },
-    dueDate: Date
+    dueDate: Date,
+    approvalType: { type: String, enum: ['sequential', 'parallel', 'any_one'], default: 'parallel' },
+    requiredApprovals: { type: Number, default: 1 },
+    escalationPath: [String],
+    estimatedValue: Number,
+    priority: { type: String, enum: ['low', 'medium', 'high', 'critical'], default: 'medium' },
+    currentApproverIndex: Number
   },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }

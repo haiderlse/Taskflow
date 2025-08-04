@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Task, User } from '../types';
 import { mockApi } from '../services/mockApi';
-import { CalendarIcon, MessageCircleIcon, UserIcon } from './icons';
+import { CalendarIcon, MessageCircleIcon, UserIcon, ClockIcon, CheckCircleIcon, XIcon } from './icons';
 
 interface TaskCardProps {
   task: Task;
@@ -39,7 +39,22 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, users, onDragStart, onClick }
         return 'bg-yellow-100 text-yellow-800';
     }
     return 'bg-slate-100 text-slate-600';
-  }
+  };
+
+  const getApprovalStatusIcon = () => {
+    if (!task.approval) return null;
+    
+    switch (task.approval.status) {
+      case 'approved':
+        return <CheckCircleIcon className="w-4 h-4 text-green-500" title="Approved" />;
+      case 'rejected':
+        return <XIcon className="w-4 h-4 text-red-500" title="Rejected" />;
+      case 'pending':
+        return <ClockIcon className="w-4 h-4 text-yellow-500" title="Pending Approval" />;
+      default:
+        return null;
+    }
+  };
 
   return (
     <div
@@ -63,6 +78,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, users, onDragStart, onClick }
               <span>{commentCount}</span>
             </div>
           )}
+          {getApprovalStatusIcon()}
         </div>
         {assignee && (
             <div title={assignee.displayName} className="w-7 h-7 bg-indigo-100 rounded-full flex items-center justify-center text-primary font-bold text-xs border-2 border-white">

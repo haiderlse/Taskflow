@@ -417,6 +417,52 @@ export const enhancedApi = {
     return [...USERS];
   },
 
+  getUserById: async (uid: string): Promise<User | null> => {
+    await networkDelay(100);
+    if (isMongoDBAvailable) {
+      return await DatabaseService.getUserById(uid);
+    }
+    return USERS.find(u => u.uid === uid) || null;
+  },
+
+  createUser: async (userData: Partial<User>): Promise<User> => {
+    await networkDelay(300);
+    const newUser: User = {
+      uid: userData.uid || `user-${Date.now()}`,
+      email: userData.email || '',
+      displayName: userData.displayName || '',
+      role: userData.role || 'member',
+      department: userData.department,
+      passwordHash: userData.passwordHash,
+      managerId: userData.managerId,
+      approvalLimit: userData.approvalLimit,
+      workload: userData.workload || 40,
+      isActive: userData.isActive ?? true,
+      createdAt: userData.createdAt || new Date(),
+      lastLogin: userData.lastLogin
+    };
+
+    if (isMongoDBAvailable) {
+      return await DatabaseService.createUser(newUser);
+    }
+    
+    USERS.push(newUser);
+    return newUser;
+  },
+
+  updateUser: async (uid: string, updates: Partial<User>): Promise<User | null> => {
+    await networkDelay(200);
+    if (isMongoDBAvailable) {
+      return await DatabaseService.updateUser(uid, updates);
+    }
+    
+    const userIndex = USERS.findIndex(u => u.uid === uid);
+    if (userIndex === -1) return null;
+    
+    USERS[userIndex] = { ...USERS[userIndex], ...updates };
+    return USERS[userIndex];
+  },
+
   // Projects
   getProjects: async (): Promise<Project[]> => {
     await networkDelay(300);
@@ -453,6 +499,31 @@ export const enhancedApi = {
   },
 
   // Tasks
+  getTasks: async (): Promise<Task[]> => {
+    await networkDelay(400);
+    if (isMongoDBAvailable) {
+      // MongoDB doesn't have a direct getTasks method, so we'll get all tasks
+      const projects = await DatabaseService.getProjects();
+      const allTasks: Task[] = [];
+      for (const project of projects) {
+        const projectTasks = await DatabaseService.getTasksForProject(project.id);
+        allTasks.push(...projectTasks);
+      }
+      return allTasks;
+    }
+    return [...TASKS];
+  },
+
+  getTaskById: async (taskId: string): Promise<Task | null> => {
+    await networkDelay(200);
+    if (isMongoDBAvailable) {
+      // MongoDB doesn't have a direct getTaskById method, so we'll find from all tasks
+      const allTasks = await enhancedApi.getTasks();
+      return allTasks.find(t => t.id === taskId) || null;
+    }
+    return TASKS.find(t => t.id === taskId) || null;
+  },
+
   getTasksForUser: async (userId: string): Promise<Task[]> => {
     await networkDelay(400);
     if (isMongoDBAvailable) {

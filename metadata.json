@@ -1,0 +1,6 @@
+{
+  "name": "TaskFlow: Real-Time Project Management",
+  "description": "A real-time, collaborative project management application inspired by Asana. Manage projects, tasks, and team collaboration seamlessly on a dynamic Kanban board.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}

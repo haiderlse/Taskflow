@@ -463,6 +463,32 @@ export const enhancedApi = {
     return USERS[userIndex];
   },
 
+  deleteUser: async (uid: string): Promise<boolean> => {
+    await networkDelay(500);
+    
+    // Validate that user exists
+    const userIndex = USERS.findIndex(u => u.uid === uid);
+    if (userIndex === -1) {
+      throw new Error('User not found');
+    }
+    
+    // Prevent deletion of the last admin
+    const adminUsers = USERS.filter(u => u.role === 'admin' && u.isActive);
+    const isTargetAdmin = USERS[userIndex].role === 'admin';
+    if (isTargetAdmin && adminUsers.length <= 1) {
+      throw new Error('Cannot delete the last administrator. Assign admin role to another user first.');
+    }
+    
+    if (isMongoDBAvailable) {
+      return await DatabaseService.deleteUser(uid);
+    }
+    
+    // For demo purposes, we'll actually remove the user from the array
+    // In a real application, you might soft-delete by setting isActive: false
+    USERS.splice(userIndex, 1);
+    return true;
+  },
+
   // Projects
   getProjects: async (): Promise<Project[]> => {
     await networkDelay(300);

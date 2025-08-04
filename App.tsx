@@ -68,7 +68,7 @@ const Sidebar: React.FC<SidebarProps> = ({ projects, onNavigate, currentView, on
   return (
     <aside className="w-64 bg-sidebar text-light-text flex flex-col p-2 space-y-1">
       <div className="flex items-center justify-between p-3 mb-2">
-        <button className="text-light-text hover:text-white"><MenuIcon className="w-5 h-5" /></button>
+        <button className="text-light-text hover:text-white" title="Menu"><MenuIcon className="w-5 h-5" /></button>
         <button onClick={onShowCreateModal} className="flex items-center space-x-2 bg-accent hover:bg-accent-hover text-white px-3 py-1.5 rounded-md text-sm font-semibold">
           <PlusIcon className="w-4 h-4" />
           <span>Create</span>
@@ -105,10 +105,6 @@ const Sidebar: React.FC<SidebarProps> = ({ projects, onNavigate, currentView, on
       </div>
       
       <div className="flex-shrink-0 p-2 space-y-2">
-        <div className="bg-gray-700/50 p-3 rounded-lg text-center">
-            <p className="text-sm font-medium text-white">Your trial has ended</p>
-            <button onClick={onUpgrade} className="mt-2 w-full bg-yellow-400 text-yellow-900 font-bold px-4 py-2 rounded-md text-sm hover:bg-yellow-300">Upgrade</button>
-        </div>
         <button onClick={onInvite} className="w-full text-center py-2 text-sm text-subtle-text hover:text-white">Invite teammates</button>
       </div>
     </aside>
@@ -200,7 +196,7 @@ const App: React.FC = () => {
             case 'project':
                 const project = projects.find(p => p.id === currentView.id);
                 return project ? <ProjectView project={project} currentUser={currentUser} users={users} /> : <HomePage user={currentUser} projects={projects} users={users} onCreateProject={handleCreateProject} />;
-            case 'my-tasks': return <MyTasksPage />;
+            case 'my-tasks': return <MyTasksPage currentUser={currentUser} users={users} projects={projects} />;
             case 'inbox': return <InboxPage />;
             case 'approvals': return <ApprovalsPage currentUser={currentUser} users={users} />;
             case 'reporting': return <ReportingPage currentUser={currentUser} users={users} />;

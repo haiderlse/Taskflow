@@ -1,8 +1,8 @@
 import { User, Project, Task, Comment, ColumnId, TimeEntry, Milestone, Portfolio, Goal } from '../types';
-import { DatabaseService } from './database';
+import { supabaseService } from './supabaseService';
 
-// Initialize database connection (for demo, we'll use mock data if MongoDB is not available)
-let isMongoDBAvailable = false;
+// Initialize database connection (for demo, we'll use mock data if Supabase is not available)
+let isSupabaseAvailable = false;
 
 // --- MOCK DATABASE (fallback) ---
 const USERS: User[] = [
@@ -385,12 +385,21 @@ const notify = (key: string, data: any) => {
 // Initialize database
 const initializeDatabase = async () => {
   try {
-    await DatabaseService.init();
-    isMongoDBAvailable = true;
-    console.log('Using MongoDB database');
+    // Check if Supabase is properly configured
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    
+    if (supabaseUrl && supabaseKey && supabaseUrl !== 'your_supabase_project_url' && supabaseKey !== 'your_supabase_anon_key') {
+      // Test connection by trying to get users
+      await supabaseService.getUsers();
+      isSupabaseAvailable = true;
+      console.log('Using Supabase database');
+    } else {
+      throw new Error('Supabase not configured');
+    }
   } catch (error) {
-    console.warn('MongoDB not available, using mock data:', error);
-    isMongoDBAvailable = false;
+    console.warn('Supabase not available, using mock data:', error);
+    isSupabaseAvailable = false;
   }
 };
 
@@ -402,8 +411,8 @@ export const enhancedApi = {
   // Authentication and Users
   getCurrentUser: async (): Promise<User> => {
     await networkDelay(100);
-    if (isMongoDBAvailable) {
-      const user = await DatabaseService.getUserById('user-1');
+    if (isSupabaseAvailable) {
+      const user = await supabaseService.getCurrentUser();
       return user || USERS[0];
     }
     return USERS[0];
@@ -411,22 +420,27 @@ export const enhancedApi = {
   
   getUsers: async (): Promise<User[]> => {
     await networkDelay(100);
-    if (isMongoDBAvailable) {
-      return await DatabaseService.getUsers();
+    if (isSupabaseAvailable) {
+      return await supabaseService.getUsers();
     }
     return [...USERS];
   },
 
   getUserById: async (uid: string): Promise<User | null> => {
     await networkDelay(100);
-    if (isMongoDBAvailable) {
-      return await DatabaseService.getUserById(uid);
+    if (isSupabaseAvailable) {
+      return await supabaseService.getUserById(uid);
     }
     return USERS.find(u => u.uid === uid) || null;
   },
 
   createUser: async (userData: Partial<User>): Promise<User> => {
     await networkDelay(300);
+    
+    if (isSupabaseAvailable) {
+      return await supabaseService.createUser(userData);
+    }
+    
     const newUser: User = {
       uid: userData.uid || `user-${Date.now()}`,
       email: userData.email || '',
@@ -441,10 +455,6 @@ export const enhancedApi = {
       createdAt: userData.createdAt || new Date(),
       lastLogin: userData.lastLogin
     };
-
-    if (isMongoDBAvailable) {
-      return await DatabaseService.createUser(newUser);
-    }
     
     USERS.push(newUser);
     return newUser;
@@ -452,8 +462,8 @@ export const enhancedApi = {
 
   updateUser: async (uid: string, updates: Partial<User>): Promise<User | null> => {
     await networkDelay(200);
-    if (isMongoDBAvailable) {
-      return await DatabaseService.updateUser(uid, updates);
+    if (isSupabaseAvailable) {
+      return await supabaseService.updateUser(uid, updates);
     }
     
     const userIndex = USERS.findIndex(u => u.uid === uid);
@@ -479,8 +489,8 @@ export const enhancedApi = {
       throw new Error('Cannot delete the last administrator. Assign admin role to another user first.');
     }
     
-    if (isMongoDBAvailable) {
-      return await DatabaseService.deleteUser(uid);
+    if (isSupabaseAvailable) {
+      return await supabaseService.deleteUser(uid);
     }
     
     // For demo purposes, we'll actually remove the user from the array
@@ -492,14 +502,19 @@ export const enhancedApi = {
   // Projects
   getProjects: async (): Promise<Project[]> => {
     await networkDelay(300);
-    if (isMongoDBAvailable) {
-      return await DatabaseService.getProjects();
+    if (isSupabaseAvailable) {
+      return await supabaseService.getProjects();
     }
     return [...PROJECTS];
   },
 
   createProject: async (name: string, ownerId: string): Promise<Project> => {
     await networkDelay(500);
+    
+    if (isSupabaseAvailable) {
+      return await supabaseService.createProject(name, ownerId);
+    }
+    
     const colors = ['bg-green-500', 'bg-pink-500', 'bg-purple-500', 'bg-yellow-500', 'bg-blue-500'];
     const newProject: Project = {
       id: `proj-${Date.now()}`,
@@ -516,10 +531,6 @@ export const enhancedApi = {
       tags: [],
     };
     
-    if (isMongoDBAvailable) {
-      return await DatabaseService.createProject(newProject);
-    }
-    
     PROJECTS.push(newProject);
     return newProject;
   },
@@ -527,12 +538,12 @@ export const enhancedApi = {
   // Tasks
   getTasks: async (): Promise<Task[]> => {
     await networkDelay(400);
-    if (isMongoDBAvailable) {
+    if (isSupabaseAvailable) {
       // MongoDB doesn't have a direct getTasks method, so we'll get all tasks
-      const projects = await DatabaseService.getProjects();
+      const projects = await supabaseService.getProjects();
       const allTasks: Task[] = [];
       for (const project of projects) {
-        const projectTasks = await DatabaseService.getTasksForProject(project.id);
+        const projectTasks = await supabaseService.getTasksForProject(project.id);
         allTasks.push(...projectTasks);
       }
       return allTasks;
@@ -542,7 +553,7 @@ export const enhancedApi = {
 
   getTaskById: async (taskId: string): Promise<Task | null> => {
     await networkDelay(200);
-    if (isMongoDBAvailable) {
+    if (isSupabaseAvailable) {
       // MongoDB doesn't have a direct getTaskById method, so we'll find from all tasks
       const allTasks = await enhancedApi.getTasks();
       return allTasks.find(t => t.id === taskId) || null;
@@ -552,16 +563,16 @@ export const enhancedApi = {
 
   getTasksForUser: async (userId: string): Promise<Task[]> => {
     await networkDelay(400);
-    if (isMongoDBAvailable) {
-      return await DatabaseService.getTasksForUser(userId);
+    if (isSupabaseAvailable) {
+      return await supabaseService.getTasksForUser(userId);
     }
     return TASKS.filter(t => t.assigneeId === userId);
   },
 
   getTasksForProject: async (projectId: string): Promise<Task[]> => {
     await networkDelay(400);
-    if (isMongoDBAvailable) {
-      return await DatabaseService.getTasksForProject(projectId);
+    if (isSupabaseAvailable) {
+      return await supabaseService.getTasksForProject(projectId);
     }
     return TASKS.filter(t => t.projectId === projectId);
   },
@@ -593,9 +604,9 @@ export const enhancedApi = {
       updatedAt: new Date(),
     };
     
-    if (isMongoDBAvailable) {
-      const created = await DatabaseService.createTask(newTask);
-      notify(`tasks:${projectId}`, await DatabaseService.getTasksForProject(projectId));
+    if (isSupabaseAvailable) {
+      const created = await supabaseService.createTask(newTask);
+      notify(`tasks:${projectId}`, await supabaseService.getTasksForProject(projectId));
       return created;
     }
     
@@ -607,10 +618,10 @@ export const enhancedApi = {
   updateTask: async (taskId: string, updates: Partial<Task>): Promise<Task> => {
     await networkDelay(200);
     
-    if (isMongoDBAvailable) {
-      const updated = await DatabaseService.updateTask(taskId, updates);
+    if (isSupabaseAvailable) {
+      const updated = await supabaseService.updateTask(taskId, updates);
       if (updated) {
-        notify(`tasks:${updated.projectId}`, await DatabaseService.getTasksForProject(updated.projectId));
+        notify(`tasks:${updated.projectId}`, await supabaseService.getTasksForProject(updated.projectId));
         return updated;
       }
       throw new Error('Task not found');
@@ -672,8 +683,8 @@ export const enhancedApi = {
       createdAt: new Date()
     };
     
-    if (isMongoDBAvailable) {
-      return await DatabaseService.createTimeEntry(newEntry);
+    if (isSupabaseAvailable) {
+      return await supabaseService.createTimeEntry(newEntry);
     }
     
     TIME_ENTRIES.push(newEntry);
@@ -689,8 +700,8 @@ export const enhancedApi = {
 
   getTimeEntriesForTask: async (taskId: string): Promise<TimeEntry[]> => {
     await networkDelay(200);
-    if (isMongoDBAvailable) {
-      return await DatabaseService.getTimeEntriesForTask(taskId);
+    if (isSupabaseAvailable) {
+      return await supabaseService.getTimeEntriesForTask(taskId);
     }
     return TIME_ENTRIES.filter(e => e.taskId === taskId);
   },
@@ -741,8 +752,8 @@ export const enhancedApi = {
   // Milestones
   getMilestonesForProject: async (projectId: string): Promise<Milestone[]> => {
     await networkDelay(300);
-    if (isMongoDBAvailable) {
-      return await DatabaseService.getMilestonesForProject(projectId);
+    if (isSupabaseAvailable) {
+      return await supabaseService.getMilestonesForProject(projectId);
     }
     return MILESTONES.filter(m => m.projectId === projectId);
   },
@@ -761,8 +772,8 @@ export const enhancedApi = {
       createdAt: new Date()
     };
     
-    if (isMongoDBAvailable) {
-      return await DatabaseService.createMilestone(newMilestone);
+    if (isSupabaseAvailable) {
+      return await supabaseService.createMilestone(newMilestone);
     }
     
     MILESTONES.push(newMilestone);
@@ -772,8 +783,8 @@ export const enhancedApi = {
   // Portfolios
   getPortfolios: async (): Promise<Portfolio[]> => {
     await networkDelay(300);
-    if (isMongoDBAvailable) {
-      return await DatabaseService.getPortfolios();
+    if (isSupabaseAvailable) {
+      return await supabaseService.getPortfolios();
     }
     return [...PORTFOLIOS];
   },
@@ -791,8 +802,8 @@ export const enhancedApi = {
       createdAt: new Date()
     };
     
-    if (isMongoDBAvailable) {
-      return await DatabaseService.createPortfolio(newPortfolio);
+    if (isSupabaseAvailable) {
+      return await supabaseService.createPortfolio(newPortfolio);
     }
     
     PORTFOLIOS.push(newPortfolio);
@@ -802,8 +813,8 @@ export const enhancedApi = {
   // Goals
   getGoals: async (): Promise<Goal[]> => {
     await networkDelay(300);
-    if (isMongoDBAvailable) {
-      return await DatabaseService.getGoals();
+    if (isSupabaseAvailable) {
+      return await supabaseService.getGoals();
     }
     return [...GOALS];
   },
@@ -824,8 +835,8 @@ export const enhancedApi = {
       updatedAt: new Date()
     };
     
-    if (isMongoDBAvailable) {
-      return await DatabaseService.createGoal(newGoal);
+    if (isSupabaseAvailable) {
+      return await supabaseService.createGoal(newGoal);
     }
     
     GOALS.push(newGoal);
@@ -835,8 +846,8 @@ export const enhancedApi = {
   // Comments
   getCommentsForTask: async (taskId: string): Promise<Comment[]> => {
     await networkDelay(300);
-    if (isMongoDBAvailable) {
-      return await DatabaseService.getCommentsForTask(taskId);
+    if (isSupabaseAvailable) {
+      return await supabaseService.getCommentsForTask(taskId);
     }
     return COMMENTS.filter(c => c.taskId === taskId).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   },
@@ -853,9 +864,9 @@ export const enhancedApi = {
       updatedAt: new Date(),
     };
     
-    if (isMongoDBAvailable) {
-      const created = await DatabaseService.addComment(newComment);
-      notify(`comments:${taskId}`, await DatabaseService.getCommentsForTask(taskId));
+    if (isSupabaseAvailable) {
+      const created = await supabaseService.addComment(newComment);
+      notify(`comments:${taskId}`, await supabaseService.getCommentsForTask(taskId));
       return created;
     }
     

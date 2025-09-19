@@ -1,5 +1,5 @@
 import { User, AuthCredentials, RegisterData } from '../types';
-import { enhancedApi } from './enhancedApi';
+import { supabaseService } from './supabaseService';
 
 export class AuthService {
   private static currentUser: User | null = null;
@@ -17,6 +17,36 @@ export class AuthService {
 
   static async login(credentials: AuthCredentials): Promise<{ user: User; token: string }> {
     try {
+      // Try Supabase auth first
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      
+      if (supabaseUrl && supabaseKey && supabaseUrl !== 'your_supabase_project_url' && supabaseKey !== 'your_supabase_anon_key') {
+        try {
+          const { user: authUser, session } = await supabaseService.signIn(credentials.email, credentials.password);
+          
+          if (authUser && session) {
+            const user = await supabaseService.getUserById(authUser.id);
+            if (!user) {
+              throw new Error('User profile not found');
+            }
+            
+            this.currentUser = user;
+            this.sessionToken = session.access_token;
+            
+            // Store in localStorage for persistence
+            localStorage.setItem('auth_token', session.access_token);
+            localStorage.setItem('current_user', JSON.stringify(user));
+            
+            return { user, token: session.access_token };
+          }
+        } catch (supabaseError) {
+          console.warn('Supabase auth failed, falling back to demo mode:', supabaseError);
+        }
+      }
+      
+      // Fallback to demo mode with enhanced API
+      const { enhancedApi } = await import('./enhancedApi');
       const users = await enhancedApi.getUsers();
       const user = users.find(u => u.email === credentials.email);
       
@@ -55,6 +85,40 @@ export class AuthService {
 
   static async register(registerData: RegisterData): Promise<{ user: User; token: string }> {
     try {
+      // Try Supabase auth first
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      
+      if (supabaseUrl && supabaseKey && supabaseUrl !== 'your_supabase_project_url' && supabaseKey !== 'your_supabase_anon_key') {
+        try {
+          const { user: authUser, session } = await supabaseService.signUp(
+            registerData.email, 
+            registerData.password, 
+            registerData.displayName
+          );
+          
+          if (authUser && session) {
+            const user = await supabaseService.getUserById(authUser.id);
+            if (!user) {
+              throw new Error('User profile not created');
+            }
+            
+            this.currentUser = user;
+            this.sessionToken = session.access_token;
+            
+            // Store in localStorage for persistence
+            localStorage.setItem('auth_token', session.access_token);
+            localStorage.setItem('current_user', JSON.stringify(user));
+            
+            return { user, token: session.access_token };
+          }
+        } catch (supabaseError) {
+          console.warn('Supabase registration failed, falling back to demo mode:', supabaseError);
+        }
+      }
+      
+      // Fallback to demo mode with enhanced API
+      const { enhancedApi } = await import('./enhancedApi');
       const users = await enhancedApi.getUsers();
       const existingUser = users.find(u => u.email === registerData.email);
       
@@ -96,10 +160,27 @@ export class AuthService {
   }
 
   static async logout(): Promise<void> {
-    this.currentUser = null;
-    this.sessionToken = null;
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('current_user');
+    try {
+      // Try to sign out from Supabase if available
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      
+      if (supabaseUrl && supabaseKey && supabaseUrl !== 'your_supabase_project_url' && supabaseKey !== 'your_supabase_anon_key') {
+        try {
+          await supabaseService.signOut();
+        } catch (error) {
+          console.warn('Supabase signout error:', error);
+        }
+      }
+    } catch (error) {
+      console.warn('Logout error:', error);
+    } finally {
+      // Always clear local session data
+      this.currentUser = null;
+      this.sessionToken = null;
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('current_user');
+    }
   }
 
   static async checkSession(): Promise<User | null> {

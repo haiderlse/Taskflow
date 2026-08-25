@@ -1,13 +1,23 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Project, Task, User, ColumnId } from '../types';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Project, Task, User, ColumnId, Priority, TaskFilterOptions } from '../types';
 import { enhancedApi } from '../services/enhancedApi';
 import TaskModal from './TaskModal';
 import CalendarView from './CalendarView';
 import TimelineView from './TimelineView';
+import DependencyGraph from './DependencyGraph';
+import KanbanAnalytics from './KanbanAnalytics';
+import GanttView from './GanttView';
+import ProjectNotesView from './ProjectNotesView';
+import WorkloadView from './WorkloadView';
 import TimeTracking from './TimeTracking';
 import BulkActionsBar from './BulkActionsBar';
 import { TaskContextMenu } from './ContextMenu';
-import { TaskIndicators } from './VisualIndicators';
+import { TaskIndicators, TaskDependencyIndicators } from './VisualIndicators';
+import TaskFilterBar from './TaskFilterBar';
+import TimesheetsModal from './TimesheetsModal';
+import AutomationRulesModal from './AutomationRulesModal';
+import ProjectFormModal from './ProjectFormModal';
+import { filterAndSortTasks, DEFAULT_FILTER_OPTIONS } from '../utils/filterUtils';
 import {
   ListIcon,
   BoardIcon,
@@ -17,19 +27,19 @@ import {
   CalendarIcon,
   NoteIcon,
   WorkloadIcon,
+  NetworkIcon,
   PlusIcon,
   StarIcon,
   ChevronDownIcon,
   ShareIcon,
   CustomizeIcon,
-  FilterIcon,
-  SortIcon,
-  GroupIcon,
-  OptionsIcon,
-  SearchIcon,
   UserIcon as AssigneeIcon,
   CheckCircleIcon,
-  ClockIcon
+  ClockIcon,
+  DiamondIcon,
+  BoltIcon,
+  FileTextIcon,
+  TagIcon
 } from './icons';
 
 // --- Board View Component ---
@@ -63,11 +73,13 @@ const ProjectBoardView: React.FC<ProjectBoardViewProps> = ({
   const [selectedTasks, setSelectedTasks] = useState<string[]>([]);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; task: Task } | null>(null);
   const [showBulkActions, setShowBulkActions] = useState(false);
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  const [dragOverColumn, setDragOverColumn] = useState<ColumnId | null>(null);
 
   const columns: ColumnId[] = ['To Do', 'In Progress', 'Done'];
   
   const getTasksForColumn = (column: ColumnId) => {
-    return tasks.filter(task => task.status === column).sort((a, b) => a.order - b.order);
+    return tasks.filter(task => task.status === column);
   };
 
   const getAssignee = (assigneeId: string | null) => {
@@ -87,13 +99,52 @@ const ProjectBoardView: React.FC<ProjectBoardViewProps> = ({
     }
   };
 
-  const getPriorityColor = (priority: string) => {
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, taskId: string) => {
+    e.dataTransfer.setData('text/plain', taskId);
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggedTaskId(taskId);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedTaskId(null);
+    setDragOverColumn(null);
+  };
+
+  const handleDragOverColumn = (e: React.DragEvent<HTMLDivElement>, column: ColumnId) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverColumn !== column) {
+      setDragOverColumn(column);
+    }
+  };
+
+  const handleDragLeaveColumn = (e: React.DragEvent<HTMLDivElement>) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setDragOverColumn(null);
+    }
+  };
+
+  const handleDropOnColumn = async (e: React.DragEvent<HTMLDivElement>, column: ColumnId) => {
+    e.preventDefault();
+    const taskId = e.dataTransfer.getData('text/plain') || draggedTaskId;
+    setDragOverColumn(null);
+    setDraggedTaskId(null);
+
+    if (taskId) {
+      const task = tasks.find(t => t.id === taskId);
+      if (task && task.status !== column) {
+        onTaskUpdate(taskId, { status: column });
+      }
+    }
+  };
+
+  const getPriorityColor = (priority?: string) => {
     switch (priority) {
       case 'critical': return 'border-l-red-500';
       case 'high': return 'border-l-orange-500';
       case 'medium': return 'border-l-blue-500';
-      case 'low': return 'border-l-gray-500';
-      default: return 'border-l-gray-500';
+      case 'low': return 'border-l-slate-400';
+      default: return 'border-l-slate-300 dark:border-l-slate-600';
     }
   };
 
@@ -170,10 +221,10 @@ const ProjectBoardView: React.FC<ProjectBoardViewProps> = ({
     }
   };
 
-  const handleBulkMoveTasksToProject = async (taskIds: string[], projectId: string) => {
+  const handleBulkMoveTasksToProject = async (taskIds: string[], targetProjectId: string) => {
     try {
       for (const taskId of taskIds) {
-        await onTaskUpdate(taskId, { projectId });
+        await onTaskUpdate(taskId, { projectId: targetProjectId });
       }
       setSelectedTasks([]);
     } catch (error) {
@@ -181,52 +232,29 @@ const ProjectBoardView: React.FC<ProjectBoardViewProps> = ({
     }
   };
 
-  const handleTaskEdit = (task: Task) => {
-    onTaskClick(task);
-  };
-
-  const handleTaskDelete = async (taskId: string) => {
-    try {
-      await enhancedApi.deleteTask(taskId);
-    } catch (error) {
-      console.error('Failed to delete task:', error);
-    }
-  };
-
-  const handleTaskDuplicate = async (task: Task) => {
-    try {
-      await onTaskCreate(`${task.title} (Copy)`, task.projectId, task.status);
-    } catch (error) {
-      console.error('Failed to duplicate task:', error);
-    }
-  };
-
-  const handleTaskAssign = (taskId: string) => {
-    // Open assign dialog - simplified for demo
-    const assigneeId = users.length > 0 ? users[0].uid : '';
-    onTaskUpdate(taskId, { assigneeId });
-  };
-
-  const handleTaskChangeStatus = (taskId: string, status: string) => {
-    onTaskUpdate(taskId, { status: status as ColumnId });
-  };
-
-  const handleTaskChangePriority = (taskId: string, priority: string) => {
-    onTaskUpdate(taskId, { priority: priority as any });
-  };
-
   return (
     <>
-      <div className="flex h-full gap-4 p-4 overflow-x-auto">
+      <div className="flex h-full gap-4 p-4 overflow-x-auto bg-slate-100/60 dark:bg-slate-950 transition-colors">
         {columns.map(column => {
           const columnTasks = getTasksForColumn(column);
           const allColumnTasksSelected = columnTasks.length > 0 && columnTasks.every(t => selectedTasks.includes(t.id));
           const someColumnTasksSelected = columnTasks.some(t => selectedTasks.includes(t.id));
+          const isOver = dragOverColumn === column;
           
           return (
-            <div key={column} className="flex-shrink-0 w-80 bg-gray-50 rounded-lg">
+            <div 
+              key={column} 
+              onDragOver={(e) => handleDragOverColumn(e, column)}
+              onDragLeave={handleDragLeaveColumn}
+              onDrop={(e) => handleDropOnColumn(e, column)}
+              className={`flex-shrink-0 w-80 flex flex-col bg-gray-50 dark:bg-slate-900 rounded-2xl border transition-all ${
+                isOver 
+                  ? 'border-blue-500 ring-2 ring-blue-400 bg-blue-50/50 dark:bg-blue-950/30' 
+                  : 'border-gray-200 dark:border-slate-800'
+              }`}
+            >
               {/* Column Header */}
-              <div className="p-4 border-b border-gray-200">
+              <div className="p-3.5 border-b border-gray-200 dark:border-slate-800 flex-shrink-0">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
                     {showBulkActions && (
@@ -237,44 +265,59 @@ const ProjectBoardView: React.FC<ProjectBoardViewProps> = ({
                           if (input) input.indeterminate = someColumnTasksSelected && !allColumnTasksSelected;
                         }}
                         onChange={(e) => handleSelectAll(columnTasks, e.target.checked)}
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-slate-600 rounded"
                       />
                     )}
-                    <h3 className="font-semibold text-gray-900">{column}</h3>
+                    <h3 className="font-bold text-sm text-gray-900 dark:text-slate-100">{column}</h3>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-sm text-gray-500">{columnTasks.length}</span>
+                  <div className="flex items-center space-x-1.5">
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-gray-200 dark:bg-slate-800 text-gray-700 dark:text-slate-300">
+                      {columnTasks.length}
+                    </span>
                     <button
                       onClick={() => setShowBulkActions(!showBulkActions)}
-                      className={`p-1 rounded ${showBulkActions ? 'bg-blue-100 text-blue-600' : 'hover:bg-gray-200'}`}
+                      className={`p-1 rounded-lg ${showBulkActions ? 'bg-blue-100 dark:bg-blue-900/60 text-blue-600 dark:text-blue-400' : 'hover:bg-gray-200 dark:hover:bg-slate-800 text-gray-400'}`}
                       title="Toggle bulk actions"
                     >
                       <CheckCircleIcon className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => setNewTaskInputs(prev => ({ ...prev, [column]: true }))}
-                      className="p-1 hover:bg-gray-200 rounded"
+                      className="p-1 hover:bg-gray-200 dark:hover:bg-slate-800 rounded-lg text-gray-400 dark:hover:text-slate-200"
+                      title="Add task to column"
                     >
-                      <PlusIcon className="w-4 h-4 text-gray-400" />
+                      <PlusIcon className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
               </div>
 
-              {/* Tasks */}
-              <div className="p-2 space-y-2 max-h-[calc(100vh-200px)] overflow-y-auto">
+              {/* Tasks List / Drop Area */}
+              <div className="p-2 space-y-2 flex-1 max-h-[calc(100vh-250px)] overflow-y-auto">
+                {isOver && (
+                  <div className="p-2.5 border-2 border-dashed border-blue-400 bg-blue-50/70 dark:bg-blue-950/60 rounded-xl text-center text-xs font-bold text-blue-600 dark:text-blue-400 animate-pulse">
+                    Drop to move to {column}
+                  </div>
+                )}
+
                 {columnTasks.map(task => {
                   const assignee = getAssignee(task.assigneeId);
                   const isSelected = selectedTasks.includes(task.id);
+                  const isDragging = draggedTaskId === task.id;
+                  const completedSubtasks = (task.subtaskItems || []).filter(s => s.isCompleted).length;
+                  const totalSubtasks = (task.subtaskItems || []).length;
                   
                   return (
                     <div
                       key={task.id}
+                      draggable={true}
+                      onDragStart={(e) => handleDragStart(e, task.id)}
+                      onDragEnd={handleDragEnd}
                       onClick={() => onTaskClick(task)}
                       onContextMenu={(e) => handleTaskContextMenu(e, task)}
-                      className={`bg-white p-3 rounded-lg border border-gray-200 cursor-pointer hover:shadow-md transition-all ${
-                        isSelected ? 'ring-2 ring-blue-500 bg-blue-50' : ''
-                      } ${getPriorityColor(task.priority)} border-l-4`}
+                      className={`bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-gray-200 dark:border-slate-700 cursor-grab active:cursor-grabbing hover:shadow-md transition-all select-none ${
+                        isSelected ? 'ring-2 ring-blue-500 bg-blue-50 dark:bg-slate-750' : ''
+                      } ${isDragging ? 'opacity-40 scale-95 ring-2 ring-blue-400' : ''} ${getPriorityColor(task.priority)} border-l-4`}
                     >
                       {showBulkActions && (
                         <div className="flex items-center mb-2">
@@ -285,20 +328,27 @@ const ProjectBoardView: React.FC<ProjectBoardViewProps> = ({
                               e.stopPropagation();
                               handleTaskSelect(task.id, e.target.checked);
                             }}
-                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded mr-2"
+                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-slate-600 rounded mr-2"
                           />
                         </div>
                       )}
                       
-                      <div className="flex items-start justify-between mb-2">
-                        <h4 className="text-sm font-medium text-gray-900 line-clamp-2 flex-1">
-                          {task.title}
-                        </h4>
+                      <div className="flex items-start justify-between mb-1.5">
+                        <div className="flex items-center space-x-1.5 flex-1 min-w-0">
+                          {task.isMilestone && (
+                            <span className="shrink-0 text-emerald-500" title="Milestone">
+                              <DiamondIcon className="w-3.5 h-3.5 fill-emerald-500/20" />
+                            </span>
+                          )}
+                          <h4 className="text-xs font-bold text-gray-900 dark:text-slate-100 line-clamp-2">
+                            {task.title}
+                          </h4>
+                        </div>
                         {task.priority && task.priority !== 'medium' && (
-                          <div className={`ml-2 px-2 py-1 rounded text-xs font-medium flex-shrink-0 ${
-                            task.priority === 'critical' ? 'bg-red-100 text-red-800' :
-                            task.priority === 'high' ? 'bg-orange-100 text-orange-800' :
-                            'bg-gray-100 text-gray-800'
+                          <div className={`ml-2 px-1.5 py-0.5 rounded text-[9px] font-black flex-shrink-0 uppercase ${
+                            task.priority === 'critical' ? 'bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-300' :
+                            task.priority === 'high' ? 'bg-orange-100 dark:bg-orange-950/60 text-orange-700 dark:text-orange-300' :
+                            'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-300'
                           }`}>
                             {task.priority}
                           </div>
@@ -306,26 +356,41 @@ const ProjectBoardView: React.FC<ProjectBoardViewProps> = ({
                       </div>
 
                       {task.description && (
-                        <p className="text-xs text-gray-600 mb-2 line-clamp-2">
+                        <p className="text-[11px] text-gray-500 dark:text-slate-400 mb-2 line-clamp-2">
                           {task.description}
                         </p>
                       )}
 
+                      {/* Subtasks Progress */}
+                      {totalSubtasks > 0 && (
+                        <div className="mb-2 flex items-center space-x-1.5 text-[10px] text-gray-500 dark:text-slate-400 font-semibold">
+                          <span className="text-blue-600 dark:text-blue-400">✓ {completedSubtasks}/{totalSubtasks} subtasks</span>
+                          <div className="flex-1 bg-gray-200 dark:bg-slate-700 rounded-full h-1">
+                            <div
+                              className="bg-blue-600 h-1 rounded-full"
+                              style={{ width: `${(completedSubtasks / totalSubtasks) * 100}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+
                       <div className="mb-2">
-                        <TaskIndicators task={task} compact={true} />
+                        <TaskIndicators task={task} allTasks={tasks} compact={true} />
                       </div>
 
-                      <div className="flex items-center justify-between text-xs text-gray-500">
+                      <div className="flex items-center justify-between text-[11px] text-gray-500 dark:text-slate-400 pt-1 border-t border-gray-100 dark:border-slate-700/60">
                         <div className="flex items-center space-x-2">
                           {task.dueDate && (
                             <div className="flex items-center space-x-1">
-                              <CalendarIcon className="w-3 h-3" />
-                              <span>{new Date(task.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                              <span className="text-[10px]">📅</span>
+                              <span className={new Date(task.dueDate) < new Date() && task.status !== 'Done' ? 'text-red-500 font-bold' : ''}>
+                                {new Date(task.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                              </span>
                             </div>
                           )}
                           {task.timeTracked > 0 && (
-                            <div className="flex items-center space-x-1">
-                              <ClockIcon className="w-3 h-3" />
+                            <div className="flex items-center space-x-1 font-mono">
+                              <ClockIcon className="w-3 h-3 text-blue-500" />
                               <span>{formatTimeTracked(task.timeTracked)}</span>
                             </div>
                           )}
@@ -334,7 +399,7 @@ const ProjectBoardView: React.FC<ProjectBoardViewProps> = ({
                         {assignee && (
                           <div
                             title={assignee.displayName}
-                            className="w-6 h-6 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-800 font-bold text-xs"
+                            className="w-5 h-5 bg-indigo-600 text-white rounded-full flex items-center justify-center font-bold text-[9px] shadow-2xs"
                           >
                             {assignee.displayName.charAt(0)}
                           </div>
@@ -343,26 +408,29 @@ const ProjectBoardView: React.FC<ProjectBoardViewProps> = ({
 
                       {task.tags && task.tags.length > 0 && (
                         <div className="mt-2 flex flex-wrap gap-1">
-                          {task.tags.slice(0, 3).map(tag => (
+                          {task.tags.map(tag => (
                             <span
                               key={tag}
-                              className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded"
+                              className="px-1.5 py-0.2 rounded text-[9px] font-semibold bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300"
                             >
-                              {tag}
+                              #{tag}
                             </span>
                           ))}
-                          {task.tags.length > 3 && (
-                            <span className="text-xs text-gray-500">+{task.tags.length - 3}</span>
-                          )}
                         </div>
                       )}
                     </div>
                   );
                 })}
 
+                {columnTasks.length === 0 && !isOver && (
+                  <div className="p-6 border-2 border-dashed border-gray-200 dark:border-slate-800 rounded-xl text-center text-xs text-gray-400 dark:text-slate-500">
+                    No tasks in {column}
+                  </div>
+                )}
+
                 {/* Add Task Input */}
                 {newTaskInputs[column] && (
-                  <div className="bg-white p-3 rounded-lg border border-gray-200">
+                  <div className="bg-white dark:bg-slate-800 p-3 rounded-xl border border-gray-200 dark:border-slate-700 shadow-sm">
                     <input
                       type="text"
                       placeholder="Enter task title..."
@@ -383,7 +451,7 @@ const ProjectBoardView: React.FC<ProjectBoardViewProps> = ({
                           setNewTaskInputs(prev => ({ ...prev, [column]: false }));
                         }
                       }}
-                      className="w-full text-sm border-0 focus:ring-0 focus:outline-none"
+                      className="w-full text-xs font-medium border-0 focus:ring-0 focus:outline-none bg-transparent text-gray-900 dark:text-slate-100 placeholder-gray-400 dark:placeholder-slate-500"
                       autoFocus
                     />
                   </div>
@@ -393,9 +461,10 @@ const ProjectBoardView: React.FC<ProjectBoardViewProps> = ({
                 {!newTaskInputs[column] && (
                   <button
                     onClick={() => setNewTaskInputs(prev => ({ ...prev, [column]: true }))}
-                    className="w-full p-3 text-left text-sm text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
+                    className="w-full p-2.5 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 hover:bg-gray-200/70 dark:hover:bg-slate-800/80 rounded-xl transition-colors flex items-center space-x-1.5"
                   >
-                    + Add a task
+                    <PlusIcon className="w-3.5 h-3.5" />
+                    <span>Add task</span>
                   </button>
                 )}
               </div>
@@ -411,12 +480,12 @@ const ProjectBoardView: React.FC<ProjectBoardViewProps> = ({
           x={contextMenu.x}
           y={contextMenu.y}
           onClose={() => setContextMenu(null)}
-          onEdit={handleTaskEdit}
-          onDelete={handleTaskDelete}
-          onDuplicate={handleTaskDuplicate}
-          onAssign={handleTaskAssign}
-          onChangeStatus={handleTaskChangeStatus}
-          onChangePriority={handleTaskChangePriority}
+          onEdit={(t) => onTaskClick(t)}
+          onDelete={async (id) => { await enhancedApi.deleteTask(id); }}
+          onDuplicate={async (t) => { await onTaskCreate(`${t.title} (Copy)`, t.projectId, t.status); }}
+          onAssign={(id) => { onTaskUpdate(id, { assigneeId: users[0]?.uid || null }); }}
+          onChangeStatus={(id, s) => { onTaskUpdate(id, { status: s as ColumnId }); }}
+          onChangePriority={(id, p) => { onTaskUpdate(id, { priority: p as any }); }}
         />
       )}
 
@@ -446,208 +515,252 @@ interface ProjectListViewProps {
   onTaskClick: (task: Task) => void;
   onTaskUpdate: (taskId: string, updates: Partial<Task>) => void;
   onTaskCreate: (title: string, projectId: string, status: ColumnId) => Promise<void>;
+  groupBy?: TaskFilterOptions['groupBy'];
 }
 
-const ProjectListView: React.FC<ProjectListViewProps> = ({ tasks, users, project, onTaskClick, onTaskUpdate, onTaskCreate }) => {
+const ProjectListView: React.FC<ProjectListViewProps> = ({ 
+  tasks, 
+  users, 
+  project, 
+  onTaskClick, 
+  onTaskUpdate, 
+  onTaskCreate,
+  groupBy = 'none'
+}) => {
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState('');
 
   const handleTaskCreate = useCallback(async () => {
     if (newTaskTitle.trim() === '') return;
     try {
-        await onTaskCreate(newTaskTitle.trim(), project.id, 'To Do');
-        setNewTaskTitle('');
-        setIsAddingTask(false);
+      await onTaskCreate(newTaskTitle.trim(), project.id, 'To Do');
+      setNewTaskTitle('');
+      setIsAddingTask(false);
     } catch (error) {
-        console.error("Failed to create task from list view:", error);
+      console.error("Failed to create task from list view:", error);
     }
   }, [project.id, newTaskTitle, onTaskCreate]);
 
-  const sortedTasks = tasks.filter(t => t.status !== 'Done');
-  const completedTasks = tasks.filter(t => t.status === 'Done');
-
   const getAssignee = useCallback((assigneeId: string | null) => {
-      return users.find(u => u.uid === assigneeId);
+    return users.find(u => u.uid === assigneeId);
   }, [users]);
 
-  const ToolButton = ({icon, label}: {icon: React.ReactNode, label?: string}) => (
-    <button className="flex items-center space-x-1.5 px-2.5 py-1 text-sm border border-gray-300 rounded-md bg-white hover:bg-gray-50 text-gray-700">
-        {icon}
-        {label && <span>{label}</span>}
-    </button>
-  );
+  // Grouping partitions
+  const taskGroups = useMemo(() => {
+    if (groupBy === 'status') {
+      return [
+        { key: 'To Do', title: 'To Do', tasks: tasks.filter(t => t.status === 'To Do') },
+        { key: 'In Progress', title: 'In Progress', tasks: tasks.filter(t => t.status === 'In Progress') },
+        { key: 'Done', title: 'Done', tasks: tasks.filter(t => t.status === 'Done') }
+      ];
+    }
+    if (groupBy === 'priority') {
+      return [
+        { key: 'critical', title: '🔥 Critical Priority', tasks: tasks.filter(t => t.priority === 'critical') },
+        { key: 'high', title: '⚡ High Priority', tasks: tasks.filter(t => t.priority === 'high') },
+        { key: 'medium', title: '📌 Medium Priority', tasks: tasks.filter(t => t.priority === 'medium') },
+        { key: 'low', title: '🌱 Low Priority', tasks: tasks.filter(t => !t.priority || t.priority === 'low') }
+      ];
+    }
+    if (groupBy === 'assignee') {
+      const groups = users.map(u => ({
+        key: u.uid,
+        title: u.displayName,
+        tasks: tasks.filter(t => t.assigneeId === u.uid)
+      }));
+      groups.push({
+        key: 'unassigned',
+        title: 'Unassigned',
+        tasks: tasks.filter(t => !t.assigneeId)
+      });
+      return groups;
+    }
+
+    // Default: Incomplete vs Completed
+    return [
+      { key: 'active', title: 'Active Tasks', tasks: tasks.filter(t => t.status !== 'Done') },
+      { key: 'completed', title: 'Completed Tasks', tasks: tasks.filter(t => t.status === 'Done') }
+    ];
+  }, [tasks, groupBy, users]);
 
   return (
-    <>
-      {/* Toolbar */}
-      <div className="flex items-center justify-between p-2.5 border-b border-border-color flex-shrink-0 bg-gray-50/50">
-          <button onClick={() => setIsAddingTask(true)} className="flex items-center space-x-1 px-2.5 py-1 text-sm font-medium border border-transparent rounded-md hover:bg-gray-200 text-gray-700">
-              <PlusIcon className="w-4 h-4"/>
-              <span>Add task</span>
+    <div className="flex-1 overflow-y-auto bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100">
+      <div className="p-3">
+        {/* Quick Add Row Button */}
+        <div className="flex items-center space-x-2 mb-3">
+          <button 
+            onClick={() => setIsAddingTask(true)} 
+            className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition-colors"
+          >
+            <PlusIcon className="w-3.5 h-3.5"/>
+            <span>Add task</span>
           </button>
-          <div className="flex items-center space-x-2">
-              <ToolButton icon={<FilterIcon className="w-4 h-4"/>} label="Filter" />
-              <ToolButton icon={<SortIcon className="w-4 h-4"/>} label="Sort" />
-              <ToolButton icon={<GroupIcon className="w-4 h-4"/>} label="Group" />
-              <ToolButton icon={<OptionsIcon className="w-4 h-4"/>} label="Options" />
-              <ToolButton icon={<SearchIcon className="w-4 h-4"/>} />
+        </div>
+
+        {/* Column Headers */}
+        <div className="grid grid-cols-[minmax(0,_1fr)_140px_130px_100px_100px] gap-4 text-[11px] text-gray-400 dark:text-slate-500 uppercase tracking-wider font-bold border-b border-gray-200 dark:border-slate-800 pb-2 px-3 sticky top-0 bg-white dark:bg-slate-900 z-10">
+          <span className="pl-7">Task Name</span>
+          <span>Assignee</span>
+          <span>Due Date</span>
+          <span>Priority</span>
+          <span>Time Logged</span>
+        </div>
+
+        {/* Inline Task Adder */}
+        {isAddingTask && (
+          <div className="grid grid-cols-[minmax(0,_1fr)_140px_130px_100px_100px] gap-4 items-center px-3 py-2 bg-blue-50/50 dark:bg-slate-800/60 rounded-xl border border-blue-200 dark:border-blue-800 my-1">
+            <div className="flex items-center space-x-2">
+              <span className="w-4 h-4 rounded-full border border-dashed border-gray-400 text-center text-[10px] text-gray-400" />
+              <input 
+                type="text"
+                autoFocus
+                value={newTaskTitle}
+                onChange={(e) => setNewTaskTitle(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleTaskCreate()}
+                onBlur={() => { if(newTaskTitle) { handleTaskCreate() } else { setIsAddingTask(false) } }}
+                placeholder="Write a task name and press Enter..."
+                className="w-full text-xs font-semibold focus:outline-none bg-transparent text-gray-900 dark:text-slate-100 placeholder-gray-400"
+              />
+            </div>
+            <span className="text-[11px] text-gray-400">Unassigned</span>
+            <span className="text-[11px] text-gray-400">No due date</span>
+            <span className="text-[11px] text-gray-400">Medium</span>
+            <span className="text-[11px] text-gray-400">0m</span>
           </div>
-      </div>
+        )}
 
-      {/* Task List */}
-      <div className="flex-1 overflow-y-auto">
-          <div className="p-1">
-              <div className="grid grid-cols-[minmax(0,_1fr)_150px_150px_100px_40px] gap-4 text-xs text-subtle-text font-medium border-b pb-2 px-3 sticky top-0 bg-white z-10">
-                  <span className="pl-8">Name</span>
-                  <span>Assignee</span>
-                  <span>Due date</span>
-                  <span>Time tracked</span>
-                  <button className="text-gray-400 hover:text-dark-text"><PlusIcon className="w-4 h-4"/></button>
-              </div>
-              
-              <div className="divide-y divide-border-color">
-                {sortedTasks.map(task => {
-                    const assignee = getAssignee(task.assigneeId);
-                    return (
-                      <div key={task.id} onClick={() => onTaskClick(task)} className="grid grid-cols-[minmax(0,_1fr)_150px_150px_100px_40px] gap-4 items-center group cursor-pointer hover:bg-gray-50 px-3 py-1.5">
-                          <div className="flex items-center space-x-3">
-                              <button onClick={(e) => {
-                                e.stopPropagation();
-                                onTaskUpdate(task.id, { status: 'Done' });
-                              }} className="flex-shrink-0 p-1 -m-1 group/btn">
-                                <CheckCircleIcon className="w-5 h-5 text-gray-300 group-hover/btn:text-green-500 transition-colors"/>
-                              </button>
-                              <span className="truncate text-sm py-1">{task.title}</span>
-                              {task.priority && task.priority !== 'medium' && (
-                                <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                  task.priority === 'critical' ? 'bg-red-100 text-red-800' :
-                                  task.priority === 'high' ? 'bg-orange-100 text-orange-800' :
-                                  'bg-gray-100 text-gray-800'
-                                }`}>
-                                  {task.priority}
-                                </span>
-                              )}
-                          </div>
-                          <div className="flex items-center justify-start">
-                              {assignee ? (
-                                  <div title={assignee.displayName} className="w-7 h-7 bg-indigo-100 rounded-full flex items-center justify-center text-primary font-bold text-xs border-2 border-white">
-                                      {assignee.displayName.charAt(0)}
-                                  </div>
-                              ) : <AssigneeIcon className="w-7 h-7 p-1 text-gray-300 border-2 border-dashed rounded-full"/>}
-                          </div>
-                          <div>
-                              {task.dueDate ? (
-                                    <span className="text-sm text-gray-600">{new Date(task.dueDate).toLocaleDateString(undefined, {month: 'short', day: 'numeric' })}</span>
-                              ) : <CalendarIcon className="w-7 h-7 p-1 text-gray-300 border-2 border-dashed rounded-full" />}
-                          </div>
-                          <div className="flex items-center space-x-1">
-                              {task.timeTracked > 0 ? (
-                                <div className="flex items-center space-x-1 text-sm text-gray-600">
-                                  <ClockIcon className="w-4 h-4" />
-                                  <span>{Math.floor(task.timeTracked / 60)}h {task.timeTracked % 60}m</span>
-                                </div>
-                              ) : (
-                                <ClockIcon className="w-7 h-7 p-1 text-gray-300 border-2 border-dashed rounded-full" />
-                              )}
-                          </div>
-                          <div></div>
-                      </div>
-                    )
-                })}
+        {/* Grouped Task Rows */}
+        <div className="space-y-4 mt-2">
+          {taskGroups.map(group => {
+            if (group.tasks.length === 0 && groupBy !== 'status') return null;
 
-                {isAddingTask && (
-                <div className="grid grid-cols-[minmax(0,_1fr)_150px_150px_100px_40px] gap-4 items-center px-3 py-1.5">
-                      <div className="flex items-center space-x-3">
-                        <CheckCircleIcon className="w-5 h-5 text-gray-300 flex-shrink-0"/>
-                        <input 
-                          type="text"
-                          autoFocus
-                          value={newTaskTitle}
-                          onChange={(e) => setNewTaskTitle(e.target.value)}
-                          onKeyDown={(e) => e.key === 'Enter' && handleTaskCreate()}
-                          onBlur={() => { if(newTaskTitle) { handleTaskCreate() } else { setIsAddingTask(false) } }}
-                          placeholder="Write a task name"
-                          className="w-full text-sm focus:outline-none focus:ring-0 border-0 p-1 bg-transparent"
-                        />
-                      </div>
-                  </div>
-                )}
-              </div>
-              {completedTasks.length > 0 && (
-                <div className="pt-4">
-                    <h4 className="px-3 mb-1 text-sm font-medium text-gray-500">Completed</h4>
-                    {completedTasks.map(task => {
-                        const assignee = getAssignee(task.assigneeId);
-                        return (
-                          <div key={task.id} onClick={() => onTaskClick(task)} className="grid grid-cols-[minmax(0,_1fr)_150px_150px_100px_40px] gap-4 items-center group cursor-pointer hover:bg-gray-50 px-3 py-1.5 text-gray-500">
-                              <div className="flex items-center space-x-3">
-                                  <button onClick={(e) => {
-                                      e.stopPropagation();
-                                      onTaskUpdate(task.id, { status: 'To Do' });
-                                  }} className="flex-shrink-0 p-1 -m-1">
-                                      <CheckCircleIcon className="w-5 h-5 text-green-500"/>
-                                  </button>
-                                  <span className="truncate text-sm py-1 line-through">{task.title}</span>
-                              </div>
-                              <div className="flex items-center justify-start">
-                                  {assignee ? (
-                                      <div title={assignee.displayName} className="w-7 h-7 bg-indigo-100 rounded-full flex items-center justify-center text-primary font-bold text-xs border-2 border-white opacity-70">
-                                          {assignee.displayName.charAt(0)}
-                                      </div>
-                                  ) : <AssigneeIcon className="w-7 h-7 p-1 text-gray-300 border-2 border-dashed rounded-full"/>}
-                              </div>
-                              <div>
-                                  {task.dueDate ? (
-                                        <span className="text-sm line-through">{new Date(task.dueDate).toLocaleDateString(undefined, {month: 'short', day: 'numeric' })}</span>
-                                  ) : <CalendarIcon className="w-7 h-7 p-1 text-gray-300 border-2 border-dashed rounded-full" />}
-                              </div>
-                              <div className="flex items-center space-x-1">
-                                  {task.timeTracked > 0 ? (
-                                    <div className="flex items-center space-x-1 text-sm opacity-70">
-                                      <ClockIcon className="w-4 h-4" />
-                                      <span>{Math.floor(task.timeTracked / 60)}h {task.timeTracked % 60}m</span>
-                                    </div>
-                                  ) : (
-                                    <ClockIcon className="w-7 h-7 p-1 text-gray-300 border-2 border-dashed rounded-full" />
-                                  )}
-                              </div>
-                              <div></div>
-                          </div>
-                        )
-                    })}
+            return (
+              <div key={group.key} className="space-y-1">
+                <div className="flex items-center justify-between px-3 py-1.5 bg-gray-50/70 dark:bg-slate-800/40 rounded-lg text-xs font-bold text-gray-700 dark:text-slate-300">
+                  <span>{group.title} ({group.tasks.length})</span>
                 </div>
-              )}
-               <button className="flex items-center space-x-2 text-sm text-gray-500 hover:text-primary p-2 rounded-md hover:bg-primary/10 transition-colors m-2">
-                <PlusIcon className="w-4 h-4"/>
-                <span>Add section</span>
-              </button>
-          </div>
+
+                <div className="divide-y divide-gray-100 dark:divide-slate-800">
+                  {group.tasks.map(task => {
+                    const assignee = getAssignee(task.assigneeId);
+                    const isDone = task.status === 'Done';
+
+                    return (
+                      <div 
+                        key={task.id} 
+                        onClick={() => onTaskClick(task)} 
+                        className="grid grid-cols-[minmax(0,_1fr)_140px_130px_100px_100px] gap-4 items-center group cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-800/60 px-3 py-2 transition-colors rounded-lg"
+                      >
+                        {/* Task Title & Milestone & Blockers */}
+                        <div className="flex items-center space-x-2.5 min-w-0">
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onTaskUpdate(task.id, { status: isDone ? 'To Do' : 'Done' });
+                            }} 
+                            className="flex-shrink-0 p-0.5 text-gray-300 dark:text-slate-600 hover:text-emerald-500 transition-colors"
+                          >
+                            <CheckCircleIcon className={`w-4 h-4 ${isDone ? 'text-emerald-500' : ''}`} />
+                          </button>
+
+                          {task.isMilestone && (
+                            <span title="Milestone">
+                              <DiamondIcon className="w-3.5 h-3.5 text-emerald-500" />
+                            </span>
+                          )}
+
+                          <span className={`truncate text-xs font-semibold ${isDone ? 'line-through text-gray-400 dark:text-slate-500' : 'text-gray-900 dark:text-white'}`}>
+                            {task.title}
+                          </span>
+
+                          <TaskDependencyIndicators task={task} allTasks={tasks} />
+                        </div>
+
+                        {/* Assignee */}
+                        <div className="flex items-center space-x-2">
+                          {assignee ? (
+                            <>
+                              <div className="w-5 h-5 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold text-[9px] shrink-0">
+                                {assignee.displayName.charAt(0)}
+                              </div>
+                              <span className="text-xs text-gray-700 dark:text-slate-300 truncate">{assignee.displayName}</span>
+                            </>
+                          ) : (
+                            <span className="text-xs text-gray-400 italic">Unassigned</span>
+                          )}
+                        </div>
+
+                        {/* Due Date */}
+                        <div className="text-xs">
+                          {task.dueDate ? (
+                            <span className={new Date(task.dueDate) < new Date() && !isDone ? 'text-red-500 font-bold' : 'text-gray-600 dark:text-slate-400'}>
+                              {new Date(task.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">—</span>
+                          )}
+                        </div>
+
+                        {/* Priority */}
+                        <div>
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold capitalize ${
+                            task.priority === 'critical' ? 'bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300' :
+                            task.priority === 'high' ? 'bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-300' :
+                            task.priority === 'medium' ? 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300' :
+                            'bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-400'
+                          }`}>
+                            {task.priority || 'medium'}
+                          </span>
+                        </div>
+
+                        {/* Time Tracked */}
+                        <div className="flex items-center space-x-1 text-xs font-mono text-gray-600 dark:text-slate-400">
+                          {task.timeTracked > 0 ? (
+                            <>
+                              <ClockIcon className="w-3 h-3 text-amber-500" />
+                              <span>{Math.floor(task.timeTracked / 60)}h {task.timeTracked % 60}m</span>
+                            </>
+                          ) : (
+                            <span className="text-gray-400">—</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
-    </>
+    </div>
   );
 };
 
-
-// This component has been repurposed to show the Project "List View" inspired by the Asana design.
-// The original Kanban board UI has been replaced.
-
+// --- Main Project View Component ---
 interface ProjectViewProps {
   project: Project;
   currentUser: User;
   users: User[];
 }
 
-const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, users }) => {
+export const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, users }) => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [activeTab, setActiveTab] = useState('List');
+  const [filterOptions, setFilterOptions] = useState<TaskFilterOptions>(DEFAULT_FILTER_OPTIONS);
+
+  // Modals
+  const [showTimesheetModal, setShowTimesheetModal] = useState(false);
+  const [showRulesModal, setShowRulesModal] = useState(false);
+  const [showFormModal, setShowFormModal] = useState(false);
 
   useEffect(() => {
     setLoading(true);
     enhancedApi.getTasksForProject(project.id)
-      .then(tasks => {
-        setTasks(tasks.sort((a, b) => a.order - b.order));
+      .then(fetchedTasks => {
+        setTasks(fetchedTasks.sort((a, b) => a.order - b.order));
       })
       .finally(() => setLoading(false));
 
@@ -671,133 +784,315 @@ const ProjectView: React.FC<ProjectViewProps> = ({ project, currentUser, users }
 
   const handleTaskCreate = useCallback(async (title: string, projectId: string, status: ColumnId) => {
     try {
-        await enhancedApi.createTask(title, projectId, status);
+      await enhancedApi.createTask(title, projectId, status);
     } catch (error) {
-        console.error("Failed to create task:", error);
-        throw error; // Re-throw to be caught by caller
+      console.error("Failed to create task:", error);
+      throw error;
     }
   }, []);
 
+  const handleFormTaskCreated = async (taskData: any) => {
+    try {
+      await enhancedApi.createTask(taskData.title, taskData.projectId, taskData.status || 'To Do', taskData);
+    } catch (e) {
+      console.error("Failed to create form task:", e);
+    }
+  };
+
+  // Compute filtered tasks
+  const filteredTasks = useMemo(() => {
+    return filterAndSortTasks(tasks, filterOptions, currentUser?.uid);
+  }, [tasks, filterOptions, currentUser]);
+
+  // Extract all unique tags
+  const availableTags = useMemo(() => {
+    const set = new Set<string>();
+    tasks.forEach(t => (t.tags || []).forEach(tag => set.add(tag)));
+    return Array.from(set);
+  }, [tasks]);
+
+  const handleExportCsv = () => {
+    const headers = ['Title', 'Status', 'Priority', 'Assignee', 'Due Date', 'Time Tracked (mins)', 'Milestone'];
+    const rows = filteredTasks.map(t => {
+      const u = users.find(x => x.uid === t.assigneeId);
+      return [
+        `"${t.title.replace(/"/g, '""')}"`,
+        t.status,
+        t.priority,
+        `"${u?.displayName || 'Unassigned'}"`,
+        t.dueDate ? new Date(t.dueDate).toLocaleDateString() : '',
+        t.timeTracked || 0,
+        t.isMilestone ? 'Yes' : 'No'
+      ];
+    });
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const link = document.createElement('a');
+    link.setAttribute('href', encodeURI(csvContent));
+    link.setAttribute('download', `${project.name.toLowerCase().replace(/\s+/g, '-')}-tasks.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const NavTab = ({ icon, label, active = false, onClick }: { icon: React.ReactNode, label: string, active?: boolean, onClick: () => void }) => (
-    <button onClick={onClick} className={`flex items-center space-x-2 px-2 py-3 text-sm font-medium border-b-2 transition-colors ${active ? 'text-primary border-primary' : 'text-gray-500 border-transparent hover:text-dark-text hover:border-gray-300'}`}>
-        {icon}
-        <span>{label}</span>
+    <button onClick={onClick} className={`flex items-center space-x-1.5 px-3 py-2.5 text-xs font-bold border-b-2 transition-colors ${active ? 'text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400' : 'text-gray-500 dark:text-slate-400 border-transparent hover:text-gray-900 dark:hover:text-slate-200'}`}>
+      {icon}
+      <span>{label}</span>
     </button>
   );
 
   const renderActiveView = () => {
     if (loading) {
-        return <div className="text-center p-10">Loading tasks...</div>
+      return <div className="text-center p-12 text-gray-500 dark:text-slate-400">Loading project data...</div>;
     }
     
     switch (activeTab) {
-        case 'List':
-            return <ProjectListView 
-                project={project}
-                tasks={tasks}
-                users={users}
-                onTaskClick={setSelectedTask}
-                onTaskUpdate={handleTaskUpdate}
-                onTaskCreate={handleTaskCreate}
-            />;
-        case 'Board': 
-            return <ProjectBoardView 
-                project={project}
-                tasks={tasks}
-                users={users}
-                onTaskClick={setSelectedTask}
-                onTaskUpdate={handleTaskUpdate}
-                onTaskCreate={handleTaskCreate}
-            />;
-        case 'Timeline': 
-            return <TimelineView 
-                project={project}
-                currentUser={currentUser}
-                users={users}
-            />;
-        case 'Calendar': 
-            return <CalendarView 
-                project={project}
-                currentUser={currentUser}
-                users={users}
-            />;
-        case 'Dashboard': return <div className="flex items-center justify-center h-full"><span className="text-gray-500">Dashboard View - Coming Soon</span></div>;
-        case 'Gantt': return <div className="flex items-center justify-center h-full"><span className="text-gray-500">Gantt Chart View - Coming Soon</span></div>;
-        case 'Note': return <div className="flex items-center justify-center h-full"><span className="text-gray-500">Note View - Coming Soon</span></div>;
-        case 'Workload': return <div className="flex items-center justify-center h-full"><span className="text-gray-500">Workload View - Coming Soon</span></div>;
-        default:
-            return <ProjectListView
-                project={project}
-                tasks={tasks}
-                users={users}
-                onTaskClick={setSelectedTask}
-                onTaskUpdate={handleTaskUpdate}
-                onTaskCreate={handleTaskCreate}
-            />;
+      case 'List':
+        return (
+          <ProjectListView 
+            project={project}
+            tasks={filteredTasks}
+            users={users}
+            onTaskClick={setSelectedTask}
+            onTaskUpdate={handleTaskUpdate}
+            onTaskCreate={handleTaskCreate}
+            groupBy={filterOptions.groupBy}
+          />
+        );
+      case 'Board': 
+        return (
+          <ProjectBoardView 
+            project={project}
+            tasks={filteredTasks}
+            users={users}
+            onTaskClick={setSelectedTask}
+            onTaskUpdate={handleTaskUpdate}
+            onTaskCreate={handleTaskCreate}
+          />
+        );
+      case 'Timeline': 
+        return (
+          <TimelineView 
+            project={project}
+            currentUser={currentUser}
+            users={users}
+          />
+        );
+      case 'Calendar': 
+        return (
+          <CalendarView 
+            project={project}
+            currentUser={currentUser}
+            users={users}
+          />
+        );
+      case 'Graph':
+        return (
+          <DependencyGraph
+            project={project}
+            tasks={filteredTasks}
+            users={users}
+            currentUser={currentUser}
+            onTaskClick={setSelectedTask}
+            onTaskUpdate={handleTaskUpdate}
+          />
+        );
+      case 'Dashboard': 
+        return (
+          <KanbanAnalytics
+            project={project}
+            tasks={tasks}
+            users={users}
+            currentUser={currentUser}
+            onTaskClick={setSelectedTask}
+          />
+        );
+      case 'Gantt': 
+        return (
+          <GanttView
+            project={project}
+            tasks={filteredTasks}
+            users={users}
+            currentUser={currentUser}
+            onTaskClick={setSelectedTask}
+            onTaskUpdate={handleTaskUpdate}
+            onTaskCreate={handleTaskCreate}
+          />
+        );
+      case 'Note': 
+        return (
+          <ProjectNotesView
+            project={project}
+            currentUser={currentUser}
+            users={users}
+            tasks={tasks}
+          />
+        );
+      case 'Workload': 
+        return (
+          <WorkloadView
+            project={project}
+            tasks={tasks}
+            users={users}
+            currentUser={currentUser}
+            onTaskClick={setSelectedTask}
+            onTaskUpdate={handleTaskUpdate}
+          />
+        );
+      default:
+        return (
+          <ProjectListView
+            project={project}
+            tasks={filteredTasks}
+            users={users}
+            onTaskClick={setSelectedTask}
+            onTaskUpdate={handleTaskUpdate}
+            onTaskCreate={handleTaskCreate}
+            groupBy={filterOptions.groupBy}
+          />
+        );
     }
   };
 
-
   return (
-    <div className="flex flex-col h-full bg-white text-dark-text">
-        {/* Project Header */}
-        <header className="flex items-center justify-between p-4 border-b border-border-color flex-shrink-0">
-            <div className="flex items-center space-x-3">
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${project.color}`}>
-                    <ListIcon className="w-6 h-6 text-white"/>
-                </div>
-                <h1 className="text-2xl font-bold">{project.name}</h1>
-                <button className="text-gray-400 hover:text-yellow-500"><StarIcon className="w-5 h-5"/></button>
-                <button className="text-gray-400 hover:text-dark-text"><ChevronDownIcon className="w-5 h-5"/></button>
-            </div>
+    <div className="flex flex-col h-full bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100 transition-colors">
+      {/* Project Header */}
+      <header className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-slate-800 flex-shrink-0 bg-white dark:bg-slate-900">
+        <div className="flex items-center space-x-3">
+          <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${project.color || 'bg-blue-600'} text-white shadow-xs`}>
+            <ListIcon className="w-5 h-5"/>
+          </div>
+          <div>
             <div className="flex items-center space-x-2">
-                <div className="flex -space-x-2">
-                     <div title={currentUser.displayName} className="w-8 h-8 bg-yellow-400 rounded-full flex items-center justify-center font-bold text-white border-2 border-white">
-                        {currentUser.displayName.slice(0, 2).toUpperCase()}
-                    </div>
-                     <div title="Another User" className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center font-bold text-white border-2 border-white">
-                        RD
-                    </div>
-                </div>
-                <button className="flex items-center space-x-1.5 px-4 py-1.5 text-sm font-semibold border rounded-md bg-primary text-white hover:bg-primary-hover">
-                  <ShareIcon className="w-4 h-4" />
-                  <span>Share</span>
-                </button>
-                 <button className="flex items-center space-x-1.5 px-3 py-1.5 text-sm border rounded-md bg-white hover:bg-gray-50 text-gray-700">
-                    <CustomizeIcon className="w-4 h-4"/>
-                    <span>Customize</span>
-                </button>
+              <h1 className="text-xl font-black text-gray-900 dark:text-white">{project.name}</h1>
+              <button className="text-gray-400 hover:text-amber-500 transition-colors">
+                <StarIcon className="w-4 h-4"/>
+              </button>
             </div>
-        </header>
-
-        {/* Tabs */}
-        <div className="flex items-center justify-between px-4 border-b border-border-color flex-shrink-0">
-            <nav className="flex items-center -mb-px">
-                <NavTab icon={<ListIcon className="w-4 h-4"/>} label="List" active={activeTab === 'List'} onClick={() => setActiveTab('List')} />
-                <NavTab icon={<BoardIcon className="w-4 h-4"/>} label="Board" active={activeTab === 'Board'} onClick={() => setActiveTab('Board')} />
-                <NavTab icon={<TimelineIcon className="w-4 h-4"/>} label="Timeline" active={activeTab === 'Timeline'} onClick={() => setActiveTab('Timeline')} />
-                <NavTab icon={<DashboardIcon className="w-4 h-4"/>} label="Dashboard" active={activeTab === 'Dashboard'} onClick={() => setActiveTab('Dashboard')} />
-                <NavTab icon={<GanttIcon className="w-4 h-4"/>} label="Gantt" active={activeTab === 'Gantt'} onClick={() => setActiveTab('Gantt')} />
-                <NavTab icon={<CalendarIcon className="w-4 h-4"/>} label="Calendar" active={activeTab === 'Calendar'} onClick={() => setActiveTab('Calendar')} />
-                <NavTab icon={<NoteIcon className="w-4 h-4"/>} label="Note" active={activeTab === 'Note'} onClick={() => setActiveTab('Note')} />
-                <NavTab icon={<WorkloadIcon className="w-4 h-4"/>} label="Workload" active={activeTab === 'Workload'} onClick={() => setActiveTab('Workload')} />
-                 <button className="text-gray-400 hover:text-dark-text p-3"><PlusIcon className="w-4 h-4"/></button>
-            </nav>
+            <p className="text-[11px] text-gray-500 dark:text-slate-400">
+              {tasks.length} total tasks • {tasks.filter(t => t.status === 'Done').length} completed
+            </p>
+          </div>
         </div>
-        
-        <main className="flex-1 flex flex-col overflow-y-auto">
-            {renderActiveView()}
-        </main>
 
-        {selectedTask && (
-            <TaskModal
-            task={selectedTask}
-            users={users}
-            currentUser={currentUser}
-            onClose={() => setSelectedTask(null)}
-            onUpdateTask={handleTaskUpdate}
-            />
-        )}
+        <div className="flex items-center space-x-2">
+          {/* Asana Tools Links */}
+          <button
+            onClick={() => setShowRulesModal(true)}
+            className="flex items-center space-x-1 px-3 py-1.5 text-xs font-bold rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 hover:bg-blue-100 transition-colors shadow-xs"
+            title="Workflow Automations"
+          >
+            <BoltIcon className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Automate</span>
+          </button>
+
+          <button
+            onClick={() => setShowFormModal(true)}
+            className="flex items-center space-x-1 px-3 py-1.5 text-xs font-bold rounded-xl border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 hover:bg-purple-100 transition-colors shadow-xs"
+            title="Intake Form"
+          >
+            <FileTextIcon className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Form</span>
+          </button>
+
+          <button
+            onClick={() => setShowTimesheetModal(true)}
+            className="flex items-center space-x-1 px-3 py-1.5 text-xs font-bold rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 hover:bg-amber-100 transition-colors shadow-xs"
+            title="Project Timesheets"
+          >
+            <ClockIcon className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Timesheet</span>
+          </button>
+
+          <button 
+            onClick={() => {
+              navigator.clipboard.writeText(window.location.href);
+              alert("Project link copied to clipboard!");
+            }}
+            className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition-colors"
+          >
+            <ShareIcon className="w-3.5 h-3.5" />
+            <span>Share</span>
+          </button>
+        </div>
+      </header>
+
+      {/* Tabs */}
+      <div className="flex items-center justify-between px-4 border-b border-gray-200 dark:border-slate-800 flex-shrink-0 bg-gray-50/50 dark:bg-slate-900/50">
+        <nav className="flex items-center space-x-1 overflow-x-auto -mb-px">
+          <NavTab icon={<ListIcon className="w-3.5 h-3.5"/>} label="List" active={activeTab === 'List'} onClick={() => setActiveTab('List')} />
+          <NavTab icon={<BoardIcon className="w-3.5 h-3.5"/>} label="Board" active={activeTab === 'Board'} onClick={() => setActiveTab('Board')} />
+          <NavTab icon={<TimelineIcon className="w-3.5 h-3.5"/>} label="Timeline" active={activeTab === 'Timeline'} onClick={() => setActiveTab('Timeline')} />
+          <NavTab icon={<NetworkIcon className="w-3.5 h-3.5"/>} label="Dependencies" active={activeTab === 'Graph'} onClick={() => setActiveTab('Graph')} />
+          <NavTab icon={<DashboardIcon className="w-3.5 h-3.5"/>} label="Dashboard" active={activeTab === 'Dashboard'} onClick={() => setActiveTab('Dashboard')} />
+          <NavTab icon={<GanttIcon className="w-3.5 h-3.5"/>} label="Gantt" active={activeTab === 'Gantt'} onClick={() => setActiveTab('Gantt')} />
+          <NavTab icon={<CalendarIcon className="w-3.5 h-3.5"/>} label="Calendar" active={activeTab === 'Calendar'} onClick={() => setActiveTab('Calendar')} />
+          <NavTab icon={<WorkloadIcon className="w-3.5 h-3.5"/>} label="Workload" active={activeTab === 'Workload'} onClick={() => setActiveTab('Workload')} />
+          <NavTab icon={<NoteIcon className="w-3.5 h-3.5"/>} label="Project Notes" active={activeTab === 'Note'} onClick={() => setActiveTab('Note')} />
+        </nav>
+      </div>
+
+      {/* Full Task Filter & Controls Bar */}
+      <TaskFilterBar
+        filters={filterOptions}
+        onFilterChange={setFilterOptions}
+        users={users}
+        availableTags={availableTags}
+        currentUser={currentUser}
+        totalTaskCount={tasks.length}
+        filteredTaskCount={filteredTasks.length}
+        onExportCsv={handleExportCsv}
+        onOpenRules={() => setShowRulesModal(true)}
+        onOpenForms={() => setShowFormModal(true)}
+        onOpenTimesheet={() => setShowTimesheetModal(true)}
+      />
+      
+      {/* Active Main View Area */}
+      <main className="flex-1 flex flex-col overflow-y-auto">
+        {renderActiveView()}
+      </main>
+
+      {/* Task Modal */}
+      {selectedTask && (
+        <TaskModal
+          task={selectedTask}
+          users={users}
+          currentUser={currentUser}
+          allTasks={tasks}
+          onClose={() => setSelectedTask(null)}
+          onUpdateTask={handleTaskUpdate}
+          onNavigateToTask={(targetTask) => setSelectedTask(targetTask)}
+        />
+      )}
+
+      {/* Timesheets Modal */}
+      <TimesheetsModal
+        isOpen={showTimesheetModal}
+        onClose={() => setShowTimesheetModal(false)}
+        tasks={tasks}
+        users={users}
+        currentUser={currentUser}
+        selectedProjectId={project.id}
+      />
+
+      {/* Automations & Rules Modal */}
+      <AutomationRulesModal
+        isOpen={showRulesModal}
+        onClose={() => setShowRulesModal(false)}
+        project={project}
+        users={users}
+        currentUser={currentUser}
+      />
+
+      {/* Intake Forms Modal */}
+      <ProjectFormModal
+        isOpen={showFormModal}
+        onClose={() => setShowFormModal(false)}
+        project={project}
+        users={users}
+        currentUser={currentUser}
+        onTaskCreated={handleFormTaskCreated}
+      />
     </div>
   );
 };

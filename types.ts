@@ -72,7 +72,9 @@ export interface Task {
   order: number;
   createdAt: Date;
   updatedAt: Date;
-  dependencies: string[];
+  dependencies: string[]; // List of task IDs that block this task (backward compatibility)
+  blockedBy?: string[];   // Explicit: List of task IDs that block this task
+  blocking?: string[];    // Explicit: List of task IDs that this task blocks
   subtasks: string[];
   parentTaskId?: string;
   timeTracked: number; // in minutes
@@ -81,6 +83,30 @@ export interface Task {
   tags: string[];
   attachments: Attachment[];
   approval?: ApprovalRequest;
+  isMilestone?: boolean;
+  subtaskItems?: SubtaskItem[];
+}
+
+export interface DependencyInfo {
+  taskId: string;
+  taskTitle: string;
+  status: ColumnId;
+  taskStatus?: TaskStatus;
+  isCompleted: boolean;
+  assigneeName?: string;
+  assigneeAvatar?: string;
+  dueDate?: Date | null;
+  priority?: Priority;
+}
+
+export interface TaskDependencyGraph {
+  task: Task;
+  blockers: DependencyInfo[];
+  dependents: DependencyInfo[];
+  isBlocked: boolean;
+  unresolvedBlockersCount: number;
+  totalBlockersCount: number;
+  totalDependentsCount: number;
 }
 
 export interface Comment {
@@ -115,6 +141,31 @@ export interface TimeEntry {
   endTime?: Date;
   createdAt: Date;
   isRunning: boolean;
+  category?: 'Development' | 'Design' | 'Review' | 'Meeting' | 'Testing' | 'Bugfix' | 'Other';
+  isBillable?: boolean;
+}
+
+export interface SubtaskItem {
+  id: string;
+  title: string;
+  isCompleted: boolean;
+  assigneeId?: string | null;
+  dueDate?: Date | null;
+}
+
+export interface TaskFilterOptions {
+  searchQuery: string;
+  assigneeIds: string[]; // empty = all, 'unassigned' = unassigned, 'me' = current user
+  statuses: ColumnId[];
+  priorities: Priority[];
+  dueDatePreset: 'all' | 'overdue' | 'today' | 'due_24h' | 'next_7_days' | 'this_month' | 'no_due_date' | 'custom';
+  customDateStart?: string;
+  customDateEnd?: string;
+  taskType: 'all' | 'tasks_only' | 'milestones_only' | 'approvals_only' | 'blocked_only' | 'blocking_only';
+  tags: string[];
+  sortBy: 'order' | 'dueDate' | 'priority' | 'title' | 'assignee' | 'timeTracked' | 'createdAt';
+  sortDirection: 'asc' | 'desc';
+  groupBy: 'none' | 'status' | 'assignee' | 'priority' | 'dueDate';
 }
 
 export interface Milestone {

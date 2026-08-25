@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Task, Project, Priority } from '../types';
 import { 
   ClockIcon, 
@@ -8,11 +8,16 @@ import {
   TrendingUpIcon,
   TrendingDownIcon,
   UserIcon,
-  CalendarIcon
+  CalendarIcon,
+  LinkIcon,
+  LockClosedIcon,
+  LockOpenIcon,
+  BanIcon
 } from './icons';
 
 interface TaskIndicatorsProps {
   task: Task;
+  allTasks?: Task[];
   compact?: boolean;
 }
 
@@ -37,6 +42,12 @@ interface StatusBadgeProps {
 interface OverdueBadgeProps {
   dueDate: Date | null;
   size?: 'sm' | 'md' | 'lg';
+}
+
+interface DependencyBadgeProps {
+  task: Task;
+  allTasks?: Task[];
+  compact?: boolean;
 }
 
 export const PriorityBadge: React.FC<PriorityBadgeProps> = ({ priority, size = 'md' }) => {
@@ -165,11 +176,130 @@ export const OverdueBadge: React.FC<OverdueBadgeProps> = ({ dueDate, size = 'md'
   return null;
 };
 
-export const TaskIndicators: React.FC<TaskIndicatorsProps> = ({ task, compact = false }) => {
+export const TaskDependencyIndicators: React.FC<DependencyBadgeProps> = ({ task, allTasks = [], compact = false }) => {
+  const [showTooltip, setShowTooltip] = useState<'blocked' | 'blocking' | null>(null);
+
+  const blockedByIds = task.blockedBy || task.dependencies || [];
+  const blockingIds = task.blocking || [];
+
+  if (blockedByIds.length === 0 && blockingIds.length === 0) {
+    return null;
+  }
+
+  // Resolve blocker details
+  const blockerTasks = blockedByIds.map(id => allTasks.find(t => t.id === id)).filter(Boolean) as Task[];
+  const unresolvedBlockers = blockerTasks.filter(t => t.status !== 'Done');
+  const isBlocked = unresolvedBlockers.length > 0 || (blockerTasks.length === 0 && blockedByIds.length > 0);
+
+  // Resolve dependent details
+  const dependentTasks = blockingIds.map(id => allTasks.find(t => t.id === id)).filter(Boolean) as Task[];
+
   return (
-    <div className={`flex items-center gap-2 ${compact ? 'flex-wrap' : ''}`}>
+    <div className="relative inline-flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+      {/* Blocked By Badge */}
+      {blockedByIds.length > 0 && (
+        <div 
+          className="relative inline-block"
+          onMouseEnter={() => setShowTooltip('blocked')}
+          onMouseLeave={() => setShowTooltip(null)}
+        >
+          {isBlocked ? (
+            <span
+              className={`inline-flex items-center gap-1 font-semibold rounded-md border bg-red-50 text-red-700 border-red-200 ${
+                compact ? 'text-[11px] px-1.5 py-0.5' : 'text-xs px-2 py-0.5'
+              }`}
+              title={`Blocked by ${unresolvedBlockers.length || blockedByIds.length} incomplete tasks`}
+            >
+              <BanIcon className="w-3 h-3 text-red-600 shrink-0" />
+              <span>
+                Blocked{unresolvedBlockers.length > 0 ? ` (${unresolvedBlockers.length})` : ` (${blockedByIds.length})`}
+              </span>
+            </span>
+          ) : (
+            <span
+              className={`inline-flex items-center gap-1 font-medium rounded-md border bg-emerald-50 text-emerald-700 border-emerald-200 ${
+                compact ? 'text-[11px] px-1.5 py-0.5' : 'text-xs px-2 py-0.5'
+              }`}
+              title="All prerequisite dependencies completed"
+            >
+              <LockOpenIcon className="w-3 h-3 text-emerald-600 shrink-0" />
+              <span>Unblocked</span>
+            </span>
+          )}
+
+          {/* Blocked Tooltip Popover */}
+          {showTooltip === 'blocked' && blockerTasks.length > 0 && (
+            <div className="absolute left-0 bottom-full mb-1.5 z-30 w-56 p-2 bg-gray-900 text-white rounded-lg shadow-xl text-xs space-y-1.5 pointer-events-none">
+              <div className="font-semibold text-gray-200 border-b border-gray-700 pb-1 flex items-center justify-between">
+                <span>Blocked by ({blockerTasks.length})</span>
+                <span className={isBlocked ? 'text-red-400 font-bold' : 'text-emerald-400'}>
+                  {isBlocked ? `${unresolvedBlockers.length} open` : 'All done'}
+                </span>
+              </div>
+              <div className="max-h-32 overflow-y-auto space-y-1">
+                {blockerTasks.map(b => (
+                  <div key={b.id} className="flex items-center justify-between gap-1 text-[11px]">
+                    <span className="truncate flex-1 text-gray-300">{b.title}</span>
+                    <span className={`px-1 rounded text-[10px] shrink-0 ${
+                      b.status === 'Done' ? 'bg-emerald-900 text-emerald-300' :
+                      b.status === 'In Progress' ? 'bg-blue-900 text-blue-300' :
+                      'bg-gray-800 text-gray-400'
+                    }`}>
+                      {b.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Blocking Badge */}
+      {blockingIds.length > 0 && (
+        <div 
+          className="relative inline-block"
+          onMouseEnter={() => setShowTooltip('blocking')}
+          onMouseLeave={() => setShowTooltip(null)}
+        >
+          <span
+            className={`inline-flex items-center gap-1 font-medium rounded-md border bg-purple-50 text-purple-700 border-purple-200 ${
+              compact ? 'text-[11px] px-1.5 py-0.5' : 'text-xs px-2 py-0.5'
+            }`}
+            title={`Blocks ${blockingIds.length} downstream tasks`}
+          >
+            <LinkIcon className="w-3 h-3 text-purple-600 shrink-0" />
+            <span>Blocks ({blockingIds.length})</span>
+          </span>
+
+          {/* Blocking Tooltip Popover */}
+          {showTooltip === 'blocking' && dependentTasks.length > 0 && (
+            <div className="absolute left-0 bottom-full mb-1.5 z-30 w-56 p-2 bg-gray-900 text-white rounded-lg shadow-xl text-xs space-y-1.5 pointer-events-none">
+              <div className="font-semibold text-purple-300 border-b border-gray-700 pb-1">
+                Blocks {dependentTasks.length} {dependentTasks.length === 1 ? 'task' : 'tasks'}:
+              </div>
+              <div className="max-h-32 overflow-y-auto space-y-1">
+                {dependentTasks.map(d => (
+                  <div key={d.id} className="flex items-center justify-between gap-1 text-[11px]">
+                    <span className="truncate flex-1 text-gray-300">{d.title}</span>
+                    <span className="text-[10px] text-gray-400 shrink-0">{d.status}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export const TaskIndicators: React.FC<TaskIndicatorsProps> = ({ task, allTasks = [], compact = false }) => {
+  return (
+    <div className={`flex items-center gap-1.5 ${compact ? 'flex-wrap' : ''}`}>
       <PriorityBadge priority={task.priority} size={compact ? 'sm' : 'md'} />
       <OverdueBadge dueDate={task.dueDate} size={compact ? 'sm' : 'md'} />
+      <TaskDependencyIndicators task={task} allTasks={allTasks} compact={compact} />
       
       {task.approval && (
         <span className={`inline-flex items-center gap-1 font-medium rounded-md border ${

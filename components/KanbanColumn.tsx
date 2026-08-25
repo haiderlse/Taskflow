@@ -8,13 +8,14 @@ interface KanbanColumnProps {
   columnId: ColumnId;
   tasks: Task[];
   users: User[];
+  allTasks?: Task[];
   onDrop: (e: React.DragEvent<HTMLDivElement>, columnId: ColumnId) => void;
   onDragStart: (e: React.DragEvent<HTMLDivElement>, taskId: string) => void;
   onTaskClick: (task: Task) => void;
   onTaskCreate: (title: string, columnId: ColumnId) => void;
 }
 
-const KanbanColumn: React.FC<KanbanColumnProps> = ({ columnId, tasks, users, onDrop, onDragStart, onTaskClick, onTaskCreate }) => {
+const KanbanColumn: React.FC<KanbanColumnProps> = ({ columnId, tasks, users, allTasks = [], onDrop, onDragStart, onTaskClick, onTaskCreate }) => {
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState('');
@@ -46,36 +47,36 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({ columnId, tasks, users, onD
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className={`flex-shrink-0 w-80 bg-slate-100 rounded-lg p-3 transition-colors ${isDraggingOver ? 'bg-slate-200' : ''}`}
+      className={`flex-shrink-0 w-80 bg-slate-100 dark:bg-slate-900 border border-transparent dark:border-slate-800 rounded-xl p-3 transition-colors ${isDraggingOver ? 'bg-slate-200 dark:bg-slate-800 ring-2 ring-blue-400' : ''}`}
     >
       <div className="flex justify-between items-center mb-4 px-1">
-        <h3 className="font-semibold text-slate-700">{columnId}</h3>
-        <span className="text-sm text-slate-500 bg-slate-200 rounded-full px-2 py-1">{tasks.length}</span>
+        <h3 className="font-bold text-sm text-slate-700 dark:text-slate-200">{columnId}</h3>
+        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 bg-slate-200 dark:bg-slate-800 rounded-full px-2 py-0.5">{tasks.length}</span>
       </div>
       <div className="space-y-1 h-full">
         {tasks.sort((a,b) => a.order - b.order).map(task => (
-          <TaskCard key={task.id} task={task} users={users} onDragStart={onDragStart} onClick={onTaskClick} />
+          <TaskCard key={task.id} task={task} users={users} allTasks={allTasks} onDragStart={onDragStart} onClick={onTaskClick} />
         ))}
 
         {isAddingTask ? (
-            <div className="bg-white p-2 rounded-md shadow-sm">
+            <div className="bg-white dark:bg-slate-800 p-2.5 rounded-lg border border-gray-200 dark:border-slate-700 shadow-sm">
                 <textarea
                     value={newTaskTitle}
                     onChange={(e) => setNewTaskTitle(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleCreateTask())}
                     placeholder="Enter a title for this task..."
-                    className="w-full border-none resize-none focus:ring-0 p-1"
+                    className="w-full border-none resize-none focus:ring-0 p-1 bg-transparent text-sm text-gray-900 dark:text-slate-100 placeholder-gray-400 dark:placeholder-slate-500"
                     autoFocus
                 />
                 <div className="flex items-center justify-end space-x-2 mt-2">
-                     <button onClick={() => setIsAddingTask(false)} className="text-sm px-3 py-1 rounded-md hover:bg-slate-100">Cancel</button>
-                    <button onClick={handleCreateTask} className="text-sm px-3 py-1 rounded-md bg-primary text-white hover:bg-primary-hover">Add Task</button>
+                     <button onClick={() => setIsAddingTask(false)} className="text-xs font-medium px-3 py-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 text-gray-600 dark:text-slate-300">Cancel</button>
+                    <button onClick={handleCreateTask} className="text-xs font-medium px-3 py-1.5 rounded-md bg-primary text-white hover:bg-primary-hover">Add Task</button>
                 </div>
             </div>
         ) : (
             <button
               onClick={() => setIsAddingTask(true)}
-              className="w-full flex items-center space-x-2 p-2 rounded-md text-slate-500 hover:bg-slate-200 hover:text-slate-700 transition-colors"
+              className="w-full flex items-center space-x-2 p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200 transition-colors text-xs font-semibold"
             >
               <PlusIcon className="w-4 h-4" />
               <span>Add a task</span>

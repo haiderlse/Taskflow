@@ -1,9 +1,8 @@
-
-import React, { useState, useEffect } from 'react';
-import { Project, User } from './types';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Project, User, Task } from './types';
 import { enhancedApi as mockApi } from './services/enhancedApi';
 import { AuthService } from './services/authService';
-import { ToastProvider } from './utils/ux';
+import { ToastProvider, useToast } from './utils/ux';
 import TopBar from './components/Header';
 import HomePage from './components/ProjectDashboard';
 import ProjectView from './components/KanbanBoard';
@@ -16,18 +15,26 @@ import GoalsPage from './components/GoalsPage';
 import TeamPage from './components/OrganizationManagement';
 import ApprovalsPage from './components/ApprovalsPage';
 import CreateModal from './components/CreateModal';
+import TaskSearchModal from './components/TaskSearchModal';
+import InviteModal from './components/InviteModal';
+import UpgradeModal from './components/UpgradeModal';
+import TaskModal from './components/TaskModal';
+import TimesheetsModal from './components/TimesheetsModal';
 import { 
   MenuIcon, 
-  PlusIcon,
-  HomeIcon,
-  CheckCircleIcon,
-  InboxIcon,
-  ReportingIcon,
-  PortfolioIcon,
-  GoalsIcon,
-  UsersIcon,
-  ChevronRightIcon,
-  CheckCircleIcon as ApprovalIcon
+  PlusIcon, 
+  HomeIcon, 
+  CheckCircleIcon, 
+  InboxIcon, 
+  ReportingIcon, 
+  PortfolioIcon, 
+  GoalsIcon, 
+  UsersIcon, 
+  ChevronRightIcon, 
+  CheckCircleIcon as ApprovalIcon,
+  SearchIcon,
+  StarIcon,
+  ClockIcon
 } from './components/icons';
 
 // --- Types --- //
@@ -38,75 +45,156 @@ interface ViewState {
 }
 
 // --- Sidebar Component Definition --- //
-
 interface SidebarProps {
   projects: Project[];
   onNavigate: (view: ViewState) => void;
   currentView: ViewState;
   onShowCreateModal: () => void;
+  onOpenSearch: () => void;
+  onOpenTimesheet: () => void;
   onUpgrade: () => void;
   onInvite: () => void;
   onCreateProject: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ projects, onNavigate, currentView, onShowCreateModal, onUpgrade, onInvite, onCreateProject }) => {
+const Sidebar: React.FC<SidebarProps> = ({ 
+  projects, 
+  onNavigate, 
+  currentView, 
+  onShowCreateModal, 
+  onOpenSearch,
+  onOpenTimesheet,
+  onUpgrade, 
+  onInvite, 
+  onCreateProject 
+}) => {
   const NavItem = ({ icon, label, selected = false, onClick }: { icon: React.ReactNode, label: string, selected?: boolean, onClick?: () => void }) => (
-    <button onClick={onClick} className={`w-full flex items-center space-x-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${selected ? 'bg-gray-700 text-white' : 'text-light-text hover:bg-gray-700/50 hover:text-white'}`}>
+    <button 
+      onClick={onClick} 
+      className={`w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
+        selected ? 'bg-blue-600 text-white shadow-sm font-bold' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+      }`}
+    >
       {icon}
       <span>{label}</span>
     </button>
   );
 
   const SectionHeader = ({ label, onAdd }: {label: string, onAdd: () => void }) => (
-      <div className="flex justify-between items-center px-3 pt-4 pb-1">
-          <h3 className="text-xs font-semibold text-subtle-text uppercase tracking-wider">{label}</h3>
-          <button onClick={onAdd} className="text-subtle-text hover:text-white">
-              <PlusIcon className="w-4 h-4" />
-          </button>
-      </div>
+    <div className="flex justify-between items-center px-3 pt-4 pb-1.5">
+      <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{label}</h3>
+      <button onClick={onAdd} className="text-slate-400 hover:text-white p-0.5 rounded transition-colors" title={`Add ${label}`}>
+        <PlusIcon className="w-3.5 h-3.5" />
+      </button>
+    </div>
   );
 
   return (
-    <aside className="w-64 bg-sidebar text-light-text flex flex-col p-2 space-y-1">
-      <div className="flex items-center justify-between p-3 mb-2">
-        <button className="text-light-text hover:text-white" title="Menu"><MenuIcon className="w-5 h-5" /></button>
-        <button onClick={onShowCreateModal} className="flex items-center space-x-2 bg-accent hover:bg-accent-hover text-white px-3 py-1.5 rounded-md text-sm font-semibold">
-          <PlusIcon className="w-4 h-4" />
+    <aside className="w-64 bg-slate-900 text-slate-200 flex flex-col p-3 space-y-1 shrink-0 select-none border-r border-slate-800">
+      {/* Brand & Create Row */}
+      <div className="flex items-center justify-between p-2 mb-1">
+        <div className="flex items-center space-x-2.5">
+          <div className="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center font-black text-white text-sm shadow-sm">
+            A
+          </div>
+          <div>
+            <span className="font-bold text-white text-sm tracking-tight block leading-tight">FlowEnterprise</span>
+            <span className="text-[10px] text-blue-400 font-medium">Asana Workspace</span>
+          </div>
+        </div>
+        <button 
+          onClick={onShowCreateModal} 
+          className="flex items-center space-x-1 bg-blue-600 hover:bg-blue-500 text-white px-2.5 py-1.5 rounded-xl text-xs font-bold shadow-sm transition-all"
+        >
+          <PlusIcon className="w-3.5 h-3.5" />
           <span>Create</span>
         </button>
       </div>
-      
-      <div className="flex-grow overflow-y-auto pr-1">
-          <NavItem icon={<HomeIcon className="w-5 h-5" />} label="Home" selected={currentView.type === 'home'} onClick={() => onNavigate({ type: 'home'})} />
-          <NavItem icon={<CheckCircleIcon className="w-5 h-5" />} label="My tasks" selected={currentView.type === 'my-tasks'} onClick={() => onNavigate({ type: 'my-tasks'})} />
-          <NavItem icon={<InboxIcon className="w-5 h-5" />} label="Inbox" selected={currentView.type === 'inbox'} onClick={() => onNavigate({ type: 'inbox'})} />
-          <NavItem icon={<ApprovalIcon className="w-5 h-5" />} label="Approvals" selected={currentView.type === 'approvals'} onClick={() => onNavigate({ type: 'approvals'})} />
-          
-          <SectionHeader label="Insights" onAdd={onShowCreateModal} />
-          <NavItem icon={<ReportingIcon className="w-5 h-5" />} label="Reporting" selected={currentView.type === 'reporting'} onClick={() => onNavigate({type: 'reporting'})} />
-          <NavItem icon={<PortfolioIcon className="w-5 h-5" />} label="Portfolios" selected={currentView.type === 'portfolios'} onClick={() => onNavigate({type: 'portfolios'})} />
-          <NavItem icon={<GoalsIcon className="w-5 h-5" />} label="Goals" selected={currentView.type === 'goals'} onClick={() => onNavigate({type: 'goals'})} />
 
-          <SectionHeader label="Projects" onAdd={onCreateProject} />
-          {projects.map(project => (
-             <button key={project.id} onClick={() => onNavigate({ type: 'project', id: project.id })} className={`w-full flex items-center space-x-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${currentView.type === 'project' && currentView.id === project.id ? 'bg-gray-700/80 text-white' : 'text-light-text hover:bg-gray-700/50 hover:text-white'}`}>
-                 <span className={`w-2.5 h-2.5 rounded-full ${project.color}`}></span>
-                 <span className="flex-grow text-left truncate">{project.name}</span>
-             </button>
-          ))}
-          
-          <SectionHeader label="Team" onAdd={onShowCreateModal} />
-           <button onClick={() => onNavigate({type: 'team'})} className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-sm font-medium transition-colors ${currentView.type === 'team' ? 'bg-gray-700 text-white' : 'text-light-text hover:bg-gray-700/50 hover:text-white'}`}>
-            <div className="flex items-center space-x-3">
-              <UsersIcon className="w-5 h-5" />
-              <span>My Company</span>
-            </div>
-            <ChevronRightIcon className="w-4 h-4" />
-          </button>
+      {/* Quick Search trigger */}
+      <div className="px-1 pb-2">
+        <button
+          onClick={onOpenSearch}
+          className="w-full flex items-center justify-between px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700/60 text-xs text-slate-400 hover:text-slate-200 transition-colors"
+        >
+          <span className="flex items-center space-x-2">
+            <SearchIcon className="w-3.5 h-3.5 text-slate-400" />
+            <span>Search tasks, projects...</span>
+          </span>
+          <kbd className="text-[10px] font-mono bg-slate-700/80 text-slate-300 px-1.5 py-0.5 rounded border border-slate-600">
+            ⌘K
+          </kbd>
+        </button>
       </div>
       
-      <div className="flex-shrink-0 p-2 space-y-2">
-        <button onClick={onInvite} className="w-full text-center py-2 text-sm text-subtle-text hover:text-white">Invite teammates</button>
+      {/* Navigation Links */}
+      <div className="flex-grow overflow-y-auto pr-1 space-y-0.5">
+        <NavItem icon={<HomeIcon className="w-4 h-4" />} label="Home Dashboard" selected={currentView.type === 'home'} onClick={() => onNavigate({ type: 'home'})} />
+        <NavItem icon={<CheckCircleIcon className="w-4 h-4" />} label="My Tasks" selected={currentView.type === 'my-tasks'} onClick={() => onNavigate({ type: 'my-tasks'})} />
+        <NavItem icon={<InboxIcon className="w-4 h-4" />} label="Activity Inbox" selected={currentView.type === 'inbox'} onClick={() => onNavigate({ type: 'inbox'})} />
+        <NavItem icon={<ApprovalIcon className="w-4 h-4" />} label="Approvals" selected={currentView.type === 'approvals'} onClick={() => onNavigate({ type: 'approvals'})} />
+        
+        {/* Workspace Timesheets Nav Link */}
+        <button
+          onClick={onOpenTimesheet}
+          className="w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+        >
+          <ClockIcon className="w-4 h-4 text-amber-400" />
+          <span>Workspace Timesheets</span>
+        </button>
+
+        <SectionHeader label="Strategic Insights" onAdd={onShowCreateModal} />
+        <NavItem icon={<ReportingIcon className="w-4 h-4" />} label="Flow & Reporting" selected={currentView.type === 'reporting'} onClick={() => onNavigate({type: 'reporting'})} />
+        <NavItem icon={<PortfolioIcon className="w-4 h-4" />} label="Portfolios" selected={currentView.type === 'portfolios'} onClick={() => onNavigate({type: 'portfolios'})} />
+        <NavItem icon={<GoalsIcon className="w-4 h-4" />} label="Goals & OKRs" selected={currentView.type === 'goals'} onClick={() => onNavigate({type: 'goals'})} />
+
+        <SectionHeader label="Projects" onAdd={onCreateProject} />
+        {projects.map(project => (
+          <button 
+            key={project.id} 
+            onClick={() => onNavigate({ type: 'project', id: project.id })} 
+            className={`w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-colors ${
+              currentView.type === 'project' && currentView.id === project.id 
+                ? 'bg-blue-600/90 text-white font-bold' 
+                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            <span className={`w-2 h-2 rounded-full shrink-0 ${project.color || 'bg-blue-500'}`} />
+            <span className="flex-grow text-left truncate">{project.name}</span>
+          </button>
+        ))}
+        
+        <SectionHeader label="Organization" onAdd={onShowCreateModal} />
+        <button 
+          onClick={() => onNavigate({type: 'team'})} 
+          className={`w-full flex items-center justify-between px-3 py-1.5 rounded-xl text-xs font-medium transition-colors ${
+            currentView.type === 'team' ? 'bg-blue-600 text-white font-bold' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+          }`}
+        >
+          <div className="flex items-center space-x-2.5">
+            <UsersIcon className="w-4 h-4" />
+            <span>Team Directory</span>
+          </div>
+          <ChevronRightIcon className="w-3.5 h-3.5 text-slate-400" />
+        </button>
+      </div>
+      
+      {/* Bottom Footer Actions */}
+      <div className="flex-shrink-0 pt-2 border-t border-slate-800 space-y-1">
+        <button 
+          onClick={onInvite} 
+          className="w-full flex items-center justify-center space-x-1.5 py-1.5 text-xs text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition-colors font-medium"
+        >
+          <UsersIcon className="w-3.5 h-3.5" />
+          <span>Invite Teammates</span>
+        </button>
+        <button 
+          onClick={onUpgrade} 
+          className="w-full flex items-center justify-center space-x-1.5 py-1.5 text-xs bg-slate-800/80 hover:bg-blue-600 text-slate-200 hover:text-white rounded-lg transition-all font-semibold"
+        >
+          <StarIcon className="w-3.5 h-3.5 text-amber-400" />
+          <span>Upgrade Plan</span>
+        </button>
       </div>
     </aside>
   );
@@ -114,30 +202,47 @@ const Sidebar: React.FC<SidebarProps> = ({ projects, onNavigate, currentView, on
 
 
 // --- Main App Component --- //
-
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [allTasks, setAllTasks] = useState<Task[]>([]);
   const [currentView, setCurrentView] = useState<ViewState>({ type: 'home' });
   const [loading, setLoading] = useState(true);
   const [authLoading, setAuthLoading] = useState(false);
+
+  // Modals
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
+  const [isTimesheetModalOpen, setIsTimesheetModalOpen] = useState(false);
+  const [modalTask, setModalTask] = useState<Task | null>(null);
+
+  const loadData = useCallback(async () => {
+    try {
+      const [allUsers, allProjects, tasks] = await Promise.all([
+        mockApi.getUsers(), 
+        mockApi.getProjects(),
+        mockApi.getTasks()
+      ]);
+      setUsers(allUsers);
+      setProjects(allProjects);
+      setAllTasks(tasks);
+    } catch (error) {
+      console.error("Failed to load data", error);
+    }
+  }, []);
 
   useEffect(() => {
     const initializeApp = async () => {
       setLoading(true);
       try {
-        // First check if user has a valid session
         const sessionUser = await AuthService.checkSession();
         if (sessionUser) {
           setCurrentUser(sessionUser);
         }
-
-        // Load initial data
-        const [allUsers, allProjects] = await Promise.all([mockApi.getUsers(), mockApi.getProjects()]);
-        setUsers(allUsers);
-        setProjects(allProjects);
+        await loadData();
       } catch (error) {
         console.error("Failed to load initial data", error);
       } finally {
@@ -145,13 +250,13 @@ const App: React.FC = () => {
       }
     };
     initializeApp();
-  }, []);
+  }, [loadData]);
 
   const handleLogin = (user: User) => {
     setAuthLoading(true);
     setTimeout(() => {
-        setCurrentUser(user);
-        setAuthLoading(false);
+      setCurrentUser(user);
+      setAuthLoading(false);
     }, 500);
   };
 
@@ -166,24 +271,44 @@ const App: React.FC = () => {
   };
   
   const handleCreateProject = async () => {
-      if (!currentUser) return;
-      const newProjectName = `New Project ${projects.length + 1}`;
-      try {
-        const newProject = await mockApi.createProject(newProjectName, currentUser.uid);
-        const updatedProjects = await mockApi.getProjects();
-        setProjects(updatedProjects);
-        setCurrentView({ type: 'project', id: newProject.id });
-      } catch (error) {
-        console.error("Failed to create project:", error);
-      }
+    if (!currentUser) return;
+    const newProjectName = `Project ${projects.length + 1}`;
+    try {
+      const newProject = await mockApi.createProject(newProjectName, currentUser.uid);
+      await loadData();
+      setCurrentView({ type: 'project', id: newProject.id });
+    } catch (error) {
+      console.error("Failed to create project:", error);
+    }
   };
 
-  const handleUpgrade = () => alert("The 'Upgrade' feature is a premium service and is not implemented in this demo.");
-  const handleInvite = () => alert("The 'Invite teammates' feature is not yet implemented.");
+  const handleTaskSelectFromSearch = (task: Task, projectId?: string) => {
+    setModalTask(task);
+    if (projectId) {
+      setCurrentView({ type: 'project', id: projectId });
+    }
+  };
+
+  const handleTaskUpdate = async (updatedTask: Task) => {
+    try {
+      await mockApi.updateTask(updatedTask.id, updatedTask);
+      await loadData();
+      if (modalTask && modalTask.id === updatedTask.id) {
+        setModalTask(updatedTask);
+      }
+    } catch (err) {
+      console.error('Failed to update task', err);
+    }
+  };
 
   const renderContent = () => {
     if (loading && !currentUser) {
-        return <div className="flex justify-center items-center h-screen bg-sidebar text-white">Loading...</div>;
+      return (
+        <div className="flex justify-center items-center h-screen bg-slate-900 text-white space-x-3">
+          <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          <span className="font-semibold text-sm">Loading workspace...</span>
+        </div>
+      );
     }
 
     if (!currentUser) {
@@ -191,48 +316,194 @@ const App: React.FC = () => {
     }
     
     const renderAppContent = () => {
-        switch (currentView.type) {
-            case 'home':
-                return <HomePage user={currentUser} projects={projects} users={users} onCreateProject={handleCreateProject} />;
-            case 'project':
-                const project = projects.find(p => p.id === currentView.id);
-                return project ? <ProjectView project={project} currentUser={currentUser} users={users} /> : <HomePage user={currentUser} projects={projects} users={users} onCreateProject={handleCreateProject} />;
-            case 'my-tasks': return <MyTasksPage currentUser={currentUser} users={users} projects={projects} />;
-            case 'inbox': return <InboxPage />;
-            case 'approvals': return <ApprovalsPage currentUser={currentUser} users={users} />;
-            case 'reporting': return <ReportingPage currentUser={currentUser} users={users} />;
-            case 'portfolios': return <PortfoliosPage />;
-            case 'goals': return <GoalsPage />;
-            case 'team': return <TeamPage currentUser={currentUser} users={users} onUserUpdate={async (userId, updates) => {
-              await mockApi.updateUser(userId, updates);
-              // Refresh users list
-              const updatedUsers = await mockApi.getUsers();
-              setUsers(updatedUsers);
-            }} />;
-            default:
-                return <HomePage user={currentUser} projects={projects} users={users} onCreateProject={handleCreateProject} />;
-        }
-    }
+      switch (currentView.type) {
+        case 'home':
+          return (
+            <HomePage 
+              user={currentUser} 
+              projects={projects} 
+              users={users} 
+              onCreateProject={handleCreateProject} 
+            />
+          );
+        case 'project':
+          const project = projects.find(p => p.id === currentView.id);
+          return project ? (
+            <ProjectView 
+              project={project} 
+              currentUser={currentUser} 
+              users={users} 
+            />
+          ) : (
+            <HomePage 
+              user={currentUser} 
+              projects={projects} 
+              users={users} 
+              onCreateProject={handleCreateProject} 
+            />
+          );
+        case 'my-tasks': 
+          return (
+            <MyTasksPage 
+              currentUser={currentUser} 
+              users={users} 
+              projects={projects}
+              onNavigateToProject={(id) => setCurrentView({ type: 'project', id })}
+            />
+          );
+        case 'inbox': 
+          return (
+            <InboxPage 
+              currentUser={currentUser}
+              onSelectTask={async (taskId) => {
+                const t = allTasks.find(x => x.id === taskId);
+                if (t) {
+                  setModalTask(t);
+                  setCurrentView({ type: 'project', id: t.projectId });
+                }
+              }}
+            />
+          );
+        case 'approvals': 
+          return <ApprovalsPage currentUser={currentUser} users={users} />;
+        case 'reporting': 
+          return <ReportingPage currentUser={currentUser} users={users} />;
+        case 'portfolios': 
+          return (
+            <PortfoliosPage 
+              currentUser={currentUser}
+              users={users}
+              projects={projects}
+              onNavigateToProject={(pId) => setCurrentView({ type: 'project', id: pId })}
+            />
+          );
+        case 'goals': 
+          return (
+            <GoalsPage 
+              currentUser={currentUser}
+              users={users}
+              projects={projects}
+            />
+          );
+        case 'team': 
+          return (
+            <TeamPage 
+              currentUser={currentUser} 
+              users={users} 
+              onUserUpdate={async (userId, updates) => {
+                await mockApi.updateUser(userId, updates);
+                await loadData();
+              }} 
+            />
+          );
+        default:
+          return (
+            <HomePage 
+              user={currentUser} 
+              projects={projects} 
+              users={users} 
+              onCreateProject={handleCreateProject} 
+            />
+          );
+      }
+    };
 
     return (
-        <div className="flex h-screen font-sans">
-            <Sidebar 
-                projects={projects} 
-                onNavigate={setCurrentView} 
-                currentView={currentView}
-                onShowCreateModal={() => setIsCreateModalOpen(true)}
-                onUpgrade={handleUpgrade}
-                onInvite={handleInvite}
-                onCreateProject={handleCreateProject}
-            />
-            <div className="flex-1 flex flex-col bg-main-bg overflow-hidden">
-                <TopBar user={currentUser} onLogout={handleLogout} />
-                <main className="flex-1 overflow-y-auto">
-                    {renderAppContent()}
-                </main>
-            </div>
-            {isCreateModalOpen && <CreateModal onClose={() => setIsCreateModalOpen(false)} />}
+      <div className="flex h-screen font-sans bg-slate-100 dark:bg-slate-950 overflow-hidden">
+        <Sidebar 
+          projects={projects} 
+          onNavigate={setCurrentView} 
+          currentView={currentView}
+          onShowCreateModal={() => setIsCreateModalOpen(true)}
+          onOpenSearch={() => setIsSearchOpen(true)}
+          onOpenTimesheet={() => setIsTimesheetModalOpen(true)}
+          onUpgrade={() => setIsUpgradeModalOpen(true)}
+          onInvite={() => setIsInviteModalOpen(true)}
+          onCreateProject={handleCreateProject}
+        />
+        <div className="flex-1 flex flex-col bg-white dark:bg-slate-900 overflow-hidden">
+          <TopBar 
+            user={currentUser} 
+            onLogout={handleLogout} 
+            onOpenSearch={() => setIsSearchOpen(true)}
+            tasks={allTasks}
+            onOpenTask={(t) => setModalTask(t)}
+            onOpenTimesheet={() => setIsTimesheetModalOpen(true)}
+          />
+          <main className="flex-1 overflow-y-auto">
+            {renderAppContent()}
+          </main>
         </div>
+
+        {/* Global Task Search Modal (Ctrl+K / Cmd+K) */}
+        <TaskSearchModal
+          isOpen={isSearchOpen}
+          onClose={() => setIsSearchOpen(false)}
+          tasks={allTasks}
+          projects={projects}
+          users={users}
+          currentUser={currentUser}
+          onSelectTask={handleTaskSelectFromSearch}
+          onNavigateToProject={(pId) => setCurrentView({ type: 'project', id: pId })}
+        />
+
+        {/* Create Modal */}
+        {isCreateModalOpen && (
+          <CreateModal 
+            onClose={() => setIsCreateModalOpen(false)} 
+            currentUser={currentUser}
+            projects={projects}
+            users={users}
+            onTaskCreated={loadData}
+            onProjectCreated={(newProj) => {
+              loadData();
+              setCurrentView({ type: 'project', id: newProj.id });
+            }}
+          />
+        )}
+
+        {/* Invite Modal */}
+        <InviteModal
+          isOpen={isInviteModalOpen}
+          onClose={() => setIsInviteModalOpen(false)}
+          projects={projects}
+          onInviteSent={(email, role) => {
+            console.log(`Invite sent to ${email} as ${role}`);
+          }}
+        />
+
+        {/* Upgrade Modal */}
+        <UpgradeModal
+          isOpen={isUpgradeModalOpen}
+          onClose={() => setIsUpgradeModalOpen(false)}
+        />
+
+        {/* Timesheet Modal */}
+        <TimesheetsModal
+          isOpen={isTimesheetModalOpen}
+          onClose={() => setIsTimesheetModalOpen(false)}
+          tasks={allTasks}
+          users={users}
+          currentUser={currentUser}
+        />
+
+        {/* Task Modal when opened from Global Search / Inbox */}
+        {modalTask && (
+          <TaskModal
+            task={modalTask}
+            users={users}
+            currentUser={currentUser || users[0]}
+            allTasks={allTasks}
+            onClose={() => setModalTask(null)}
+            onUpdateTask={async (tId, updates) => {
+              const updated = { ...modalTask, ...updates };
+              await handleTaskUpdate(updated);
+              setModalTask(updated);
+            }}
+            onNavigateToTask={(t) => setModalTask(t)}
+          />
+        )}
+      </div>
     );
   };
 

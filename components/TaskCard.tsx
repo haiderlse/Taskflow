@@ -9,6 +9,7 @@ import { TaskIndicators } from './VisualIndicators';
 interface TaskCardProps {
   task: Task;
   users: User[];
+  allTasks?: Task[];
   onDragStart: (e: React.DragEvent<HTMLDivElement>, taskId: string) => void;
   onClick: (task: Task) => void;
   onEdit?: (task: Task) => void;
@@ -25,6 +26,7 @@ interface TaskCardProps {
 const TaskCard: React.FC<TaskCardProps> = ({ 
   task, 
   users, 
+  allTasks = [],
   onDragStart, 
   onClick, 
   onEdit,
@@ -98,8 +100,8 @@ const TaskCard: React.FC<TaskCardProps> = ({
         onDragStart={handleDragStart}
         onClick={() => onClick(task)}
         onContextMenu={handleContextMenu}
-        className={`bg-white rounded-lg border shadow-sm p-4 mb-3 cursor-pointer hover:shadow-md transition-all duration-200 ${
-          isSelected ? 'ring-2 ring-blue-500 bg-blue-50' : 'hover:border-gray-300'
+        className={`bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 shadow-xs p-3.5 mb-3 cursor-grab active:cursor-grabbing hover:shadow-md transition-all duration-200 select-none ${
+          isSelected ? 'ring-2 ring-blue-500 bg-blue-50 dark:bg-slate-750' : 'hover:border-gray-300 dark:hover:border-slate-600'
         }`}
       >
         {showCheckbox && (
@@ -108,19 +110,19 @@ const TaskCard: React.FC<TaskCardProps> = ({
               type="checkbox"
               checked={isSelected}
               onChange={handleCheckboxChange}
-              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded mr-2"
+              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-slate-600 rounded mr-2"
             />
           </div>
         )}
         
         <div className="flex justify-between items-start mb-2">
-          <h4 className="text-sm font-medium text-gray-900 flex-1 line-clamp-2">{task.title}</h4>
+          <h4 className="text-sm font-semibold text-gray-900 dark:text-slate-100 flex-1 line-clamp-2">{task.title}</h4>
           {task.priority && (
-            <span className={`ml-2 px-2 py-0.5 text-xs font-medium rounded-full flex-shrink-0 ${
-              task.priority === 'critical' ? 'bg-red-100 text-red-800' :
-              task.priority === 'high' ? 'bg-orange-100 text-orange-800' :
-              task.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-              'bg-gray-100 text-gray-800'
+            <span className={`ml-2 px-2 py-0.5 text-[10px] font-bold uppercase rounded-full flex-shrink-0 ${
+              task.priority === 'critical' ? 'bg-red-100 dark:bg-red-950/60 text-red-800 dark:text-red-300' :
+              task.priority === 'high' ? 'bg-orange-100 dark:bg-orange-950/60 text-orange-800 dark:text-orange-300' :
+              task.priority === 'medium' ? 'bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300' :
+              'bg-gray-100 dark:bg-slate-700 text-gray-800 dark:text-slate-300'
             }`}>
               {task.priority}
             </span>
@@ -128,14 +130,14 @@ const TaskCard: React.FC<TaskCardProps> = ({
         </div>
 
         {task.description && (
-          <p className="text-xs text-gray-600 mb-3 line-clamp-2">{task.description}</p>
+          <p className="text-xs text-gray-600 dark:text-slate-300 mb-3 line-clamp-2">{task.description}</p>
         )}
 
         <div className="mb-3">
-          <TaskIndicators task={task} compact={true} />
+          <TaskIndicators task={task} allTasks={allTasks} compact={true} />
         </div>
 
-        <div className="flex items-center justify-between text-xs text-gray-500">
+        <div className="flex items-center justify-between text-xs text-gray-500 dark:text-slate-400">
           <div className="flex items-center space-x-3">
             {task.dueDate && (
               <div className={`flex items-center space-x-1 px-2 py-1 rounded-md border ${getDueDateStyles()}`}>
@@ -165,7 +167,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
             {task.tags && task.tags.length > 0 && (
               <div className="flex space-x-1">
                 {task.tags.slice(0, 2).map(tag => (
-                  <span key={tag} className="px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">
+                  <span key={tag} className="px-1.5 py-0.5 bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300 rounded text-xs">
                     {tag}
                   </span>
                 ))}

@@ -94,12 +94,14 @@ let TASKS: Task[] = [
       taskStatus: 'in_progress',
       assigneeId: 'user-1', 
       createdBy: 'user-1',
-      dueDate: new Date(), 
+      dueDate: new Date(Date.now() + 6 * 60 * 60 * 1000), 
       startDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
       completedDate: null,
       priority: 'high',
       order: 0, 
       dependencies: [],
+      blockedBy: [],
+      blocking: ['task-3'],
       subtasks: [],
       timeTracked: 120,
       estimatedTime: 240,
@@ -118,12 +120,14 @@ let TASKS: Task[] = [
       taskStatus: 'not_started',
       assigneeId: 'user-1', 
       createdBy: 'user-1',
-      dueDate: new Date(), 
+      dueDate: new Date(Date.now() + 18 * 60 * 60 * 1000), 
       startDate: null,
       completedDate: null,
       priority: 'medium',
       order: 1, 
-      dependencies: [],
+      dependencies: ['task-8'],
+      blockedBy: ['task-8'],
+      blocking: [],
       subtasks: [],
       timeTracked: 0,
       customFields: {},
@@ -147,6 +151,8 @@ let TASKS: Task[] = [
       priority: 'medium',
       order: 2, 
       dependencies: ['task-1'],
+      blockedBy: ['task-1'],
+      blocking: [],
       subtasks: [],
       timeTracked: 0,
       customFields: {},
@@ -170,6 +176,8 @@ let TASKS: Task[] = [
       priority: 'low',
       order: 3, 
       dependencies: [],
+      blockedBy: [],
+      blocking: [],
       subtasks: [],
       timeTracked: 0,
       customFields: {},
@@ -193,6 +201,8 @@ let TASKS: Task[] = [
       priority: 'medium',
       order: 0, 
       dependencies: [],
+      blockedBy: [],
+      blocking: [],
       subtasks: [],
       timeTracked: 480,
       estimatedTime: 360,
@@ -217,6 +227,8 @@ let TASKS: Task[] = [
       priority: 'critical',
       order: 0, 
       dependencies: [],
+      blockedBy: [],
+      blocking: [],
       subtasks: [],
       timeTracked: 0,
       customFields: {},
@@ -240,6 +252,8 @@ let TASKS: Task[] = [
       priority: 'high',
       order: 0, 
       dependencies: [],
+      blockedBy: [],
+      blocking: [],
       subtasks: [],
       timeTracked: 240,
       customFields: {},
@@ -263,6 +277,8 @@ let TASKS: Task[] = [
       priority: 'medium',
       order: 0, 
       dependencies: [],
+      blockedBy: [],
+      blocking: ['task-2'],
       subtasks: [],
       timeTracked: 90,
       estimatedTime: 480,
@@ -595,6 +611,8 @@ export const enhancedApi = {
       priority: 'medium',
       order,
       dependencies: [],
+      blockedBy: [],
+      blocking: [],
       subtasks: [],
       timeTracked: 0,
       customFields: {},
@@ -630,7 +648,66 @@ export const enhancedApi = {
     let taskIndex = TASKS.findIndex(t => t.id === taskId);
     if (taskIndex === -1) throw new Error('Task not found');
     const originalTask = TASKS[taskIndex];
-    TASKS[taskIndex] = { ...originalTask, ...updates, updatedAt: new Date() };
+
+    // Normalize dependencies / blockedBy
+    let normalizedUpdates = { ...updates };
+    if (updates.blockedBy !== undefined) {
+      normalizedUpdates.dependencies = [...updates.blockedBy];
+    } else if (updates.dependencies !== undefined && updates.blockedBy === undefined) {
+      normalizedUpdates.blockedBy = [...updates.dependencies];
+    }
+
+    // Bidirectional sync for blockedBy / dependencies:
+    if (normalizedUpdates.blockedBy !== undefined) {
+      const oldBlockers = originalTask.blockedBy || originalTask.dependencies || [];
+      const newBlockers = normalizedUpdates.blockedBy;
+      
+      // For removed blockers, remove this task from their blocking list
+      const removedBlockers = oldBlockers.filter(id => !newBlockers.includes(id));
+      removedBlockers.forEach(blockerId => {
+        const blocker = TASKS.find(t => t.id === blockerId);
+        if (blocker) {
+          blocker.blocking = (blocker.blocking || []).filter(id => id !== taskId);
+        }
+      });
+
+      // For added blockers, add this task to their blocking list
+      const addedBlockers = newBlockers.filter(id => !oldBlockers.includes(id));
+      addedBlockers.forEach(blockerId => {
+        const blocker = TASKS.find(t => t.id === blockerId);
+        if (blocker) {
+          blocker.blocking = Array.from(new Set([...(blocker.blocking || []), taskId]));
+        }
+      });
+    }
+
+    // Bidirectional sync for blocking:
+    if (normalizedUpdates.blocking !== undefined) {
+      const oldDependents = originalTask.blocking || [];
+      const newDependents = normalizedUpdates.blocking;
+
+      // For removed dependents, remove this task from their blockedBy and dependencies list
+      const removedDependents = oldDependents.filter(id => !newDependents.includes(id));
+      removedDependents.forEach(depId => {
+        const dependent = TASKS.find(t => t.id === depId);
+        if (dependent) {
+          dependent.blockedBy = (dependent.blockedBy || []).filter(id => id !== taskId);
+          dependent.dependencies = (dependent.dependencies || []).filter(id => id !== taskId);
+        }
+      });
+
+      // For added dependents, add this task to their blockedBy and dependencies list
+      const addedDependents = newDependents.filter(id => !oldDependents.includes(id));
+      addedDependents.forEach(depId => {
+        const dependent = TASKS.find(t => t.id === depId);
+        if (dependent) {
+          dependent.blockedBy = Array.from(new Set([...(dependent.blockedBy || []), taskId]));
+          dependent.dependencies = Array.from(new Set([...(dependent.dependencies || []), taskId]));
+        }
+      });
+    }
+
+    TASKS[taskIndex] = { ...originalTask, ...normalizedUpdates, updatedAt: new Date() };
     
     if (updates.status && updates.status !== originalTask.status) {
         TASKS.filter(t => t.projectId === originalTask.projectId && t.status === originalTask.status)
@@ -643,6 +720,62 @@ export const enhancedApi = {
 
     notify(`tasks:${originalTask.projectId}`, TASKS.filter(t => t.projectId === originalTask.projectId));
     return TASKS[taskIndex];
+  },
+
+  // Helper for adding a dependency (taskId is blocked by blockerId)
+  addDependency: async (taskId: string, blockerId: string): Promise<Task> => {
+    if (taskId === blockerId) {
+      throw new Error("A task cannot depend on itself");
+    }
+    const task = TASKS.find(t => t.id === taskId);
+    if (!task) throw new Error("Task not found");
+
+    const currentBlockers = task.blockedBy || task.dependencies || [];
+    if (!currentBlockers.includes(blockerId)) {
+      return await enhancedApi.updateTask(taskId, {
+        blockedBy: [...currentBlockers, blockerId]
+      });
+    }
+    return task;
+  },
+
+  // Helper for removing a dependency (taskId no longer blocked by blockerId)
+  removeDependency: async (taskId: string, blockerId: string): Promise<Task> => {
+    const task = TASKS.find(t => t.id === taskId);
+    if (!task) throw new Error("Task not found");
+
+    const currentBlockers = task.blockedBy || task.dependencies || [];
+    return await enhancedApi.updateTask(taskId, {
+      blockedBy: currentBlockers.filter(id => id !== blockerId)
+    });
+  },
+
+  // Helper for adding a dependent (taskId blocks dependentId)
+  addDependent: async (taskId: string, dependentId: string): Promise<Task> => {
+    if (taskId === dependentId) {
+      throw new Error("A task cannot block itself");
+    }
+    const task = TASKS.find(t => t.id === taskId);
+    if (!task) throw new Error("Task not found");
+
+    const currentDependents = task.blocking || [];
+    if (!currentDependents.includes(dependentId)) {
+      return await enhancedApi.updateTask(taskId, {
+        blocking: [...currentDependents, dependentId]
+      });
+    }
+    return task;
+  },
+
+  // Helper for removing a dependent (taskId no longer blocks dependentId)
+  removeDependent: async (taskId: string, dependentId: string): Promise<Task> => {
+    const task = TASKS.find(t => t.id === taskId);
+    if (!task) throw new Error("Task not found");
+
+    const currentDependents = task.blocking || [];
+    return await enhancedApi.updateTask(taskId, {
+      blocking: currentDependents.filter(id => id !== dependentId)
+    });
   },
 
   updateTaskOrder: async (projectId: string, taskId: string, newStatus: ColumnId, newOrder: number): Promise<void> => {

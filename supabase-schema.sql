@@ -189,14 +189,67 @@ ALTER TABLE calendar_events ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies
 
+-- Helper: answers "is the caller an active admin?" without re-entering the
+-- users policies. A policy on `users` whose body selects from `users` causes
+-- `42P17: infinite recursion detected in policy for relation "users"`, which
+-- breaks every read and write on the table. SECURITY DEFINER runs the lookup as
+-- the function owner (which owns the table), so RLS is not re-evaluated.
+CREATE OR REPLACE FUNCTION public.is_active_admin()
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+STABLE
+AS $$
+    SELECT EXISTS (
+        SELECT 1 FROM public.users
+        WHERE uid = auth.uid() AND role = 'admin' AND is_active = true
+    );
+$$;
+
 -- Users policies
 CREATE POLICY "Users can view all active users" ON users FOR SELECT TO authenticated USING (is_active = true);
-CREATE POLICY "Users can update their own profile" ON users FOR UPDATE TO authenticated USING (auth.uid() = uid);
-CREATE POLICY "Admins can manage all users" ON users FOR ALL TO authenticated USING (
-    EXISTS (
-        SELECT 1 FROM users WHERE uid = auth.uid() AND role = 'admin' AND is_active = true
-    )
-);
+
+-- Required for sign-up: the app writes the profile row for the account that was
+-- just created, and without this INSERT policy that write is denied, leaving an
+-- auth user with no profile and a login that always fails.
+CREATE POLICY "Users can create their own profile" ON users FOR INSERT TO authenticated WITH CHECK (auth.uid() = uid);
+
+CREATE POLICY "Users can update their own profile" ON users FOR UPDATE TO authenticated
+    USING (auth.uid() = uid)
+    WITH CHECK (auth.uid() = uid);
+
+CREATE POLICY "Admins can manage all users" ON users FOR ALL TO authenticated
+    USING (public.is_active_admin())
+    WITH CHECK (public.is_active_admin());
+
+-- The UPDATE policy above lets people edit their own row, which on its own would
+-- let anyone grant themselves the admin role. These columns are admin-only.
+CREATE OR REPLACE FUNCTION public.prevent_self_privilege_escalation()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+    IF public.is_active_admin() THEN
+        RETURN NEW;
+    END IF;
+
+    IF NEW.role IS DISTINCT FROM OLD.role
+        OR NEW.is_active IS DISTINCT FROM OLD.is_active
+        OR NEW.manager_id IS DISTINCT FROM OLD.manager_id
+        OR NEW.approval_limit IS DISTINCT FROM OLD.approval_limit THEN
+        RAISE EXCEPTION 'Only an admin may change role, is_active, manager_id or approval_limit';
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER users_prevent_privilege_escalation
+    BEFORE UPDATE ON users
+    FOR EACH ROW EXECUTE FUNCTION public.prevent_self_privilege_escalation();
 
 -- Projects policies
 CREATE POLICY "Users can view projects they are members of" ON projects FOR SELECT TO authenticated USING (
@@ -208,6 +261,7 @@ CREATE POLICY "Users can view projects they are members of" ON projects FOR SELE
 );
 CREATE POLICY "Project owners can update their projects" ON projects FOR UPDATE TO authenticated USING (auth.uid() = owner_id);
 CREATE POLICY "Users can create projects" ON projects FOR INSERT TO authenticated WITH CHECK (auth.uid() = owner_id);
+CREATE POLICY "Project owners can delete their projects" ON projects FOR DELETE TO authenticated USING (auth.uid() = owner_id);
 
 -- Tasks policies
 CREATE POLICY "Users can view tasks in accessible projects" ON tasks FOR SELECT TO authenticated USING (
@@ -233,6 +287,13 @@ CREATE POLICY "Users can create tasks in accessible projects" ON tasks FOR INSER
         SELECT 1 FROM projects 
         WHERE id = project_id 
         AND auth.uid() = ANY(members)
+    )
+);
+CREATE POLICY "Users can delete tasks in their projects" ON tasks FOR DELETE TO authenticated USING (
+    auth.uid() = created_by OR
+    EXISTS (
+        SELECT 1 FROM projects
+        WHERE id = project_id AND auth.uid() = owner_id
     )
 );
 
@@ -291,33 +352,44 @@ CREATE TRIGGER update_comments_updated_at BEFORE UPDATE ON comments FOR EACH ROW
 CREATE TRIGGER update_portfolios_updated_at BEFORE UPDATE ON portfolios FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_goals_updated_at BEFORE UPDATE ON goals FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+-- ---------------------------------------------------------------------------
+-- Sample data (disabled)
+--
+-- These rows are demo accounts. They cannot sign in: there are no matching
+-- entries in auth.users, and the app authenticates through Supabase Auth only.
+-- Left in place they appear as real teammates in the Team directory and as
+-- assignable people on tasks, and the sample projects list them as members, so
+-- your own account would not be a member of any of them.
+--
+-- Uncomment only if you want throwaway data to look at.
+-- ---------------------------------------------------------------------------
 -- Insert sample data for demo purposes
-INSERT INTO users (uid, email, display_name, role, workload, is_active) VALUES
-    ('00000000-0000-0000-0000-000000000001', 'ali@example.com', 'Ali', 'admin', 40, true),
-    ('00000000-0000-0000-0000-000000000002', 'bob@example.com', 'Bob', 'manager', 35, true),
-    ('00000000-0000-0000-0000-000000000003', 'charlie@example.com', 'Charlie', 'member', 40, true);
+-- INSERT INTO users (uid, email, display_name, role, workload, is_active) VALUES
+--     ('00000000-0000-0000-0000-000000000001', 'ali@example.com', 'Ali', 'admin', 40, true),
+--     ('00000000-0000-0000-0000-000000000002', 'bob@example.com', 'Bob', 'manager', 35, true),
+--     ('00000000-0000-0000-0000-000000000003', 'charlie@example.com', 'Charlie', 'member', 40, true);
 
-INSERT INTO projects (id, name, owner_id, members, color, status, visibility, tags) VALUES
-    ('proj-1', 'AOP 2025-26', '00000000-0000-0000-0000-000000000001', 
-     ARRAY['00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000003'], 
-     'bg-green-500', 'active', 'team', ARRAY['planning']),
-    ('proj-2', 'Retail Store', '00000000-0000-0000-0000-000000000001', 
-     ARRAY['00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002'], 
-     'bg-purple-500', 'active', 'team', ARRAY['retail']),
-    ('proj-3', 'Shahlimar Franchise', '00000000-0000-0000-0000-000000000002', 
-     ARRAY['00000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000003'], 
-     'bg-pink-500', 'active', 'team', ARRAY['franchise']),
-    ('proj-4', 'Dvago', '00000000-0000-0000-0000-000000000001', 
-     ARRAY['00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000003'], 
-     'bg-gray-400', 'archived', 'team', ARRAY['tech']),
-    ('proj-5', 'Mungwao', '00000000-0000-0000-0000-000000000002', 
-     ARRAY['00000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000003'], 
-     'bg-pink-500', 'archived', 'team', ARRAY['platform']);
+-- INSERT INTO projects (id, name, owner_id, members, color, status, visibility, tags) VALUES
+--     ('proj-1', 'AOP 2025-26', '00000000-0000-0000-0000-000000000001', 
+--      ARRAY['00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000003'], 
+--      'bg-green-500', 'active', 'team', ARRAY['planning']),
+--     ('proj-2', 'Retail Store', '00000000-0000-0000-0000-000000000001', 
+--      ARRAY['00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002'], 
+--      'bg-purple-500', 'active', 'team', ARRAY['retail']),
+--     ('proj-3', 'Shahlimar Franchise', '00000000-0000-0000-0000-000000000002', 
+--      ARRAY['00000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000003'], 
+--      'bg-pink-500', 'active', 'team', ARRAY['franchise']),
+--     ('proj-4', 'Dvago', '00000000-0000-0000-0000-000000000001', 
+--      ARRAY['00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000003'], 
+--      'bg-gray-400', 'archived', 'team', ARRAY['tech']),
+--     ('proj-5', 'Mungwao', '00000000-0000-0000-0000-000000000002', 
+--      ARRAY['00000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000003'], 
+--      'bg-pink-500', 'archived', 'team', ARRAY['platform']);
 
-INSERT INTO tasks (id, title, description, status, task_status, project_id, assignee_id, created_by, priority, "order", time_tracked) VALUES
-    ('task-1', 'Follow up on Pharma Receivables Plan', 'Contact finance department.', 'In Progress', 'in_progress', 'proj-1', 
-     '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'high', 0, 120),
-    ('task-2', 'Update Q4 Financial Projections', 'Review and update financial models.', 'To Do', 'not_started', 'proj-1', 
-     '00000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000001', 'medium', 1, 0),
-    ('task-3', 'Design Store Layout', 'Create initial store layout design.', 'Done', 'completed', 'proj-2', 
-     '00000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000001', 'high', 0, 240);
+-- INSERT INTO tasks (id, title, description, status, task_status, project_id, assignee_id, created_by, priority, "order", time_tracked) VALUES
+--     ('task-1', 'Follow up on Pharma Receivables Plan', 'Contact finance department.', 'In Progress', 'in_progress', 'proj-1', 
+--      '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'high', 0, 120),
+--     ('task-2', 'Update Q4 Financial Projections', 'Review and update financial models.', 'To Do', 'not_started', 'proj-1', 
+--      '00000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000001', 'medium', 1, 0),
+--     ('task-3', 'Design Store Layout', 'Create initial store layout design.', 'Done', 'completed', 'proj-2', 
+--      '00000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000001', 'high', 0, 240);

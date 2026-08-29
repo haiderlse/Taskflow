@@ -53,6 +53,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [description, setDescription] = useState(task.description || '');
   const [priority, setPriority] = useState<Priority>(task.priority || 'medium');
   const [dueDate, setDueDate] = useState(task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '');
+  const [dueTime, setDueTime] = useState(task.dueTime || '');
   const [assigneeId, setAssigneeId] = useState(task.assigneeId);
   const [estimatedHours, setEstimatedHours] = useState(task.estimatedTime ? (task.estimatedTime / 60).toString() : '');
   const [isMilestone, setIsMilestone] = useState(!!task.isMilestone);
@@ -561,6 +562,24 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                         handleUpdate({ dueDate: e.target.value ? new Date(e.target.value) : null });
                       }}
                       className="w-full bg-transparent text-xs font-bold text-gray-900 dark:text-white focus:outline-none p-0 cursor-pointer"
+                    />
+                  </div>
+                </div>
+
+                {/* Due Time - drives the reminder ladder and places the task on the planner grid */}
+                <div className="flex items-center space-x-2.5 p-3 bg-gray-50 dark:bg-slate-800/70 border border-gray-200 dark:border-slate-700 rounded-xl">
+                  <ClockIcon className="w-4 h-4 text-gray-400 shrink-0" />
+                  <div className="flex-grow min-w-0">
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400">Due Time (optional)</label>
+                    <input
+                      type="time"
+                      value={dueTime}
+                      disabled={!dueDate}
+                      onChange={(e) => {
+                        setDueTime(e.target.value);
+                        handleUpdate({ dueTime: e.target.value || null });
+                      }}
+                      className="w-full bg-transparent text-xs font-bold text-gray-900 dark:text-white focus:outline-none p-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                   </div>
                 </div>

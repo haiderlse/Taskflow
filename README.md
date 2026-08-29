@@ -4,6 +4,7 @@ A modern React-based project management application similar to Asana, now powere
 
 ## Features
 
+- **Planner & Calendar**: Day / week / month / agenda views over meetings *and* task deadlines, with drag-to-block time planning and meeting reminders
 - **Project Management**: Create and manage projects with team collaboration
 - **Task Management**: Kanban boards, list views, and task tracking
 - **Real-time Updates**: Live collaboration using Supabase real-time subscriptions
@@ -83,6 +84,7 @@ The application uses the following main tables:
 - `milestones` - Project milestones
 - `portfolios` - Project portfolios
 - `goals` - OKRs and goal tracking
+- `calendar_events` - meetings, focus blocks, and reminders (with recurrence rules)
 
 Row Level Security (RLS) is enabled for all tables to ensure data privacy and proper access control.
 
@@ -106,6 +108,49 @@ Row Level Security (RLS) is enabled for all tables to ensure data privacy and pr
 - Custom fields and tags
 - File attachments
 - Due dates and priority levels
+
+### Planner & Calendar
+
+A single workspace-wide view of everything with a time on it — reachable from
+**Planner & Calendar** in the sidebar.
+
+**Four ranges**
+
+| Range | What it is for |
+|---|---|
+| **Day** | Plot one day hour by hour; shows remaining open slots between 9am and 6pm |
+| **Week** | The default. Seven day-columns with per-day "booked" totals |
+| **Month** | Spot crunch weeks; click any date to drop into its Day view |
+| **Agenda** | Everything in the next 30 days as one scannable list |
+
+**Meetings.** `New event` creates a meeting, focus block, reminder, deadline,
+out-of-office, or personal entry, with a location, a join link, attendees, a
+linked project, and an agenda. Events repeat daily / weekly (on chosen weekdays)
+/ monthly / yearly, with an optional end date; deleting a repeating event removes
+either the single occurrence or the whole series.
+
+**Tasks on the calendar.** Every task you are assigned shows up automatically:
+one with a *Due Time* lands on the time grid, one with a date-only deadline lands
+in the all-day **Due** row. The **Needs a slot** rail lists tasks whose deadline
+falls in view but which have no work block yet — drag one onto the grid to block
+time for it (snapped to 15 minutes, sized from the task's estimate).
+
+**Not forgetting meetings.** Three layers, so a reminder has to get through:
+
+1. A **Up next** chip in the toolbar with a live countdown and a one-click *Join*.
+2. An **in-app notification** in the Activity Inbox, which persists whether or not
+   you were looking at the screen.
+3. A **browser notification** that reaches you in another tab or window — click
+   *Turn on meeting alerts* once to grant permission.
+
+Meeting reminders are configurable per event (at start, 5/10/15/30 min, 1 hour,
+1 day). Task deadlines get an automatic ladder: a day ahead, an hour ahead (when
+a due time is set), and at the deadline. Reminders missed while the tab was
+closed still fire on the next load if they are less than 10 minutes stale, and
+each one fires only once — the fired set is remembered in `localStorage`.
+
+Events are stored in `localStorage` in demo mode and in the `calendar_events`
+table when Supabase is configured.
 
 ### Real-time Collaboration
 - Live task updates across users

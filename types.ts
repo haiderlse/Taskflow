@@ -1,6 +1,7 @@
 
 export type ColumnId = 'To Do' | 'In Progress' | 'Done';
 export type ViewType = 'list' | 'board' | 'calendar' | 'timeline' | 'dashboard' | 'gantt' | 'workload' | 'insights';
+export type PlannerRange = 'day' | 'week' | 'month' | 'agenda';
 export type Priority = 'low' | 'medium' | 'high' | 'critical';
 export type TaskStatus = 'not_started' | 'in_progress' | 'completed' | 'on_hold' | 'cancelled';
 export type UserRole = 'admin' | 'manager' | 'member' | 'viewer';
@@ -131,8 +132,11 @@ export interface Task {
   collaboratorIds?: string[]; // Task followers / collaborators
   createdBy: string;
   dueDate: Date | null;
+  dueTime?: string | null;        // 'HH:mm' local time-of-day for the deadline (date-only when absent)
   startDate: Date | null;
   completedDate: Date | null;
+  scheduledStart?: Date | null;   // Planned work block on the calendar
+  scheduledEnd?: Date | null;
   priority: Priority;
   order: number;
   createdAt: Date;
@@ -454,6 +458,79 @@ export interface KeyResult {
   isCompleted: boolean;
 }
 
+// --- Calendar & Meetings --- //
+
+export type EventType = 'meeting' | 'focus' | 'reminder' | 'deadline' | 'out_of_office' | 'personal';
+export type EventResponse = 'accepted' | 'declined' | 'tentative' | 'no_response';
+export type ReminderChannel = 'in_app' | 'browser';
+
+export interface EventAttendee {
+  userId?: string;
+  email?: string;
+  name: string;
+  isOptional?: boolean;
+  response: EventResponse;
+}
+
+export interface EventReminder {
+  id: string;
+  minutesBefore: number;
+  channels: ReminderChannel[];
+}
+
+export interface EventRecurrence {
+  frequency: 'daily' | 'weekly' | 'monthly' | 'yearly';
+  interval: number;          // every N days/weeks/months/years
+  daysOfWeek?: number[];     // 0 = Sunday .. 6 = Saturday (weekly only)
+  until?: Date | null;       // inclusive end date for the series
+  count?: number;            // alternative to `until`: total number of occurrences
+}
+
+export interface CalendarEvent {
+  id: string;
+  title: string;
+  description?: string;
+  type: EventType;
+  ownerId: string;
+  start: Date;
+  end: Date;
+  isAllDay: boolean;
+  location?: string;
+  conferenceLink?: string;
+  attendees: EventAttendee[];
+  projectId?: string;
+  taskIds?: string[];
+  color?: string;                 // tailwind bg-* class
+  reminders: EventReminder[];
+  recurrence?: EventRecurrence | null;
+  exceptions?: string[];          // ISO dates (yyyy-mm-dd) skipped in a recurring series
+  status: 'confirmed' | 'tentative' | 'cancelled';
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** A single materialised instance of an event (a recurring event yields many). */
+export interface EventOccurrence {
+  occurrenceId: string;   // `${eventId}::${startISO}` - stable across reloads
+  event: CalendarEvent;
+  start: Date;
+  end: Date;
+  isRecurringInstance: boolean;
+}
+
+/** Anything that can occupy a slot in the planner: a meeting or a task. */
+export interface ScheduleEntry {
+  id: string;
+  kind: 'event' | 'task';
+  title: string;
+  start: Date;
+  end: Date;
+  isAllDay: boolean;
+  occurrence?: EventOccurrence;
+  task?: Task;
+  color: string;
+}
+
 export type NotificationType = 
   | 'assignment' 
   | 'comment' 
@@ -463,7 +540,10 @@ export type NotificationType =
   | 'blocker_cleared' 
   | 'blocked' 
   | 'status_change' 
-  | 'approval';
+  | 'approval'
+  | 'meeting_reminder'
+  | 'meeting_invite'
+  | 'meeting_changed';
 
 export interface AppNotification {
   id: string;

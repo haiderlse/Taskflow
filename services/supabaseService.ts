@@ -61,8 +61,11 @@ export interface Database {
           assignee_id?: string;
           created_by: string;
           due_date?: string;
+          due_time?: string | null;
           start_date?: string;
           completed_date?: string;
+          scheduled_start?: string | null;
+          scheduled_end?: string | null;
           priority: string;
           order: number;
           created_at: string;
@@ -434,8 +437,11 @@ class SupabaseService {
       assigneeId: dbTask.assignee_id,
       createdBy: dbTask.created_by,
       dueDate: dbTask.due_date ? new Date(dbTask.due_date) : null,
+      dueTime: dbTask.due_time || null,
       startDate: dbTask.start_date ? new Date(dbTask.start_date) : null,
       completedDate: dbTask.completed_date ? new Date(dbTask.completed_date) : null,
+      scheduledStart: dbTask.scheduled_start ? new Date(dbTask.scheduled_start) : null,
+      scheduledEnd: dbTask.scheduled_end ? new Date(dbTask.scheduled_end) : null,
       priority: dbTask.priority as any,
       order: dbTask.order,
       createdAt: new Date(dbTask.created_at),
@@ -462,8 +468,11 @@ class SupabaseService {
       assignee_id: task.assigneeId,
       created_by: task.createdBy,
       due_date: task.dueDate?.toISOString(),
+      due_time: task.dueTime ?? null,
       start_date: task.startDate?.toISOString(),
       completed_date: task.completedDate?.toISOString(),
+      scheduled_start: task.scheduledStart?.toISOString() ?? null,
+      scheduled_end: task.scheduledEnd?.toISOString() ?? null,
       priority: task.priority,
       order: task.order,
       dependencies: task.dependencies,
@@ -486,6 +495,9 @@ class SupabaseService {
     if (updates.taskStatus !== undefined) dbUpdates.task_status = updates.taskStatus;
     if (updates.assigneeId !== undefined) dbUpdates.assignee_id = updates.assigneeId;
     if (updates.dueDate !== undefined) dbUpdates.due_date = updates.dueDate?.toISOString();
+    if (updates.dueTime !== undefined) dbUpdates.due_time = updates.dueTime;
+    if (updates.scheduledStart !== undefined) dbUpdates.scheduled_start = updates.scheduledStart?.toISOString() ?? null;
+    if (updates.scheduledEnd !== undefined) dbUpdates.scheduled_end = updates.scheduledEnd?.toISOString() ?? null;
     if (updates.startDate !== undefined) dbUpdates.start_date = updates.startDate?.toISOString();
     if (updates.completedDate !== undefined) dbUpdates.completed_date = updates.completedDate?.toISOString();
     if (updates.priority !== undefined) dbUpdates.priority = updates.priority;

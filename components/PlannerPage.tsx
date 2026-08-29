@@ -331,7 +331,7 @@ const PlannerPage: React.FC<PlannerPageProps> = ({
   useEffect(() => calendarService.subscribe(setEvents), []);
 
   // Points the calendar store at Supabase when the signed-in user can own rows
-  // there; it stays on local storage for demo logins or an unconfigured project.
+  // there; it stays on local storage if the project is unreachable.
   useEffect(() => {
     calendarService.connect(currentUser.uid);
   }, [currentUser.uid]);

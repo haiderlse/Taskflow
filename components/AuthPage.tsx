@@ -3,23 +3,19 @@ import { User, AuthCredentials, RegisterData } from '../types';
 import { AuthService } from '../services/authService';
 import { 
   AsanaLogo, 
-  GoogleIcon, 
   EyeIcon, 
   EyeOffIcon, 
-  ShieldCheckIcon,
   CheckIcon,
-  ChevronRightIcon
 } from './icons';
 
 interface AuthPageProps {
-  users: User[];
   onLogin: (user: User) => void;
   loading: boolean;
 }
 
-type AuthMode = 'login' | 'register' | 'demo';
+type AuthMode = 'login' | 'register';
 
-const AuthPage: React.FC<AuthPageProps> = ({ users, onLogin, loading }) => {
+const AuthPage: React.FC<AuthPageProps> = ({ onLogin, loading }) => {
   const [authMode, setAuthMode] = useState<AuthMode>('login');
   const [credentials, setCredentials] = useState<AuthCredentials>({ email: '', password: '' });
   const [registerData, setRegisterData] = useState<RegisterData>({ 
@@ -29,22 +25,14 @@ const AuthPage: React.FC<AuthPageProps> = ({ users, onLogin, loading }) => {
     department: 'Engineering',
     role: 'member'
   });
-  const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [authError, setAuthError] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
+  const isConfigured = AuthService.isConfigured();
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotSubmitted, setForgotSubmitted] = useState(false);
-  const [showSsoPrompt, setShowSsoPrompt] = useState(false);
-  const [ssoDomain, setSsoDomain] = useState('');
-
-  useEffect(() => {
-    if (!selectedUserId && users.length > 0) {
-      setSelectedUserId(users[0].uid);
-    }
-  }, [users, selectedUserId]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,33 +64,18 @@ const AuthPage: React.FC<AuthPageProps> = ({ users, onLogin, loading }) => {
     }
   };
 
-  const handleDemoLogin = (userIdToLogin?: string) => {
-    const targetId = userIdToLogin || selectedUserId;
-    if (targetId) {
-      const userToLogin = users.find(u => u.uid === targetId);
-      if (userToLogin) {
-        onLogin(userToLogin);
-      }
-    }
-  };
-
-  const handleGoogleSignIn = () => {
-    // Quick one-click login with first demo user or admin
-    if (users.length > 0) {
-      onLogin(users[0]);
-    }
-  };
-
-  const handleSsoSubmit = (e: React.FormEvent) => {
+  const handleForgotSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ssoDomain.trim()) return;
-    // Auto-match user by domain or fall back to default user
-    const matched = users.find(u => u.email.toLowerCase().includes(ssoDomain.toLowerCase().replace('@', '')));
-    if (matched) {
-      onLogin(matched);
-    } else if (users.length > 0) {
-      onLogin(users[0]);
+    if (!forgotEmail.trim()) return;
+    setAuthError('');
+    try {
+      await AuthService.resetPassword(forgotEmail.trim());
+    } catch (error: any) {
+      // Deliberately not surfaced per-address: telling callers which emails exist
+      // would turn this form into an account-enumeration oracle.
+      console.warn('Password reset request failed:', error);
     }
+    setForgotSubmitted(true);
   };
 
   return (
@@ -162,12 +135,10 @@ const AuthPage: React.FC<AuthPageProps> = ({ users, onLogin, loading }) => {
               <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 dark:text-white mt-1">
                 {authMode === 'login' && 'Log in to your workspace'}
                 {authMode === 'register' && 'Get started with Asana'}
-                {authMode === 'demo' && 'Select a team role to preview'}
               </h1>
               <p className="text-xs sm:text-sm text-gray-500 dark:text-slate-400 mt-1">
                 {authMode === 'login' && 'Connect work across teams, track progress in real time, and hit deadlines.'}
                 {authMode === 'register' && 'Join over 100,000+ high-performing teams organizing projects with clarity.'}
-                {authMode === 'demo' && 'Switch between Admin, Manager, and Team Member accounts with 1 click.'}
               </p>
             </div>
 
@@ -195,38 +166,18 @@ const AuthPage: React.FC<AuthPageProps> = ({ users, onLogin, loading }) => {
               >
                 Sign Up
               </button>
-              <button
-                type="button"
-                onClick={() => { setAuthMode('demo'); setAuthError(''); }}
-                className={`flex-1 py-2 px-3 rounded-lg transition-all flex items-center justify-center space-x-1.5 ${
-                  authMode === 'demo'
-                    ? 'bg-[#F06A6A] text-white shadow-xs'
-                    : 'text-[#F06A6A] hover:bg-rose-50 dark:hover:bg-rose-950/40'
-                }`}
-              >
-                <span>⚡ Demo Mode</span>
-              </button>
             </div>
 
-            {/* SSO Quick Action Buttons (Login & Register Modes) */}
-            {authMode !== 'demo' && (
-              <div className="space-y-3 mb-6">
-                <button
-                  type="button"
-                  onClick={handleGoogleSignIn}
-                  className="w-full flex items-center justify-center space-x-3 py-2.5 px-4 rounded-xl border border-gray-300 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800 text-xs sm:text-sm font-bold text-gray-700 dark:text-slate-200 transition-colors shadow-2xs"
-                >
-                  <GoogleIcon className="w-4 h-4" />
-                  <span>Continue with Google</span>
-                </button>
-
-                <div className="relative flex py-1 items-center">
-                  <div className="flex-grow border-t border-gray-200 dark:border-slate-800"></div>
-                  <span className="shrink-0 mx-4 text-[11px] font-bold text-gray-400 uppercase tracking-wider">
-                    or with work email
-                  </span>
-                  <div className="flex-grow border-t border-gray-200 dark:border-slate-800"></div>
-                </div>
+            {/* Configuration warning: without Supabase there is no way to sign in. */}
+            {!isConfigured && (
+              <div className="mb-5 p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-900 text-amber-800 dark:text-amber-300 text-xs font-semibold space-y-1.5">
+                <div className="font-bold">Supabase is not configured</div>
+                <p className="font-medium leading-relaxed">
+                  Sign-in needs a Supabase project. Run <code className="font-mono">supabase-schema.sql</code> in the
+                  SQL Editor, then add <code className="font-mono">VITE_SUPABASE_URL</code> and{' '}
+                  <code className="font-mono">VITE_SUPABASE_ANON_KEY</code> to a{' '}
+                  <code className="font-mono">.env.local</code> file and restart the dev server.
+                </p>
               </div>
             )}
 
@@ -297,20 +248,11 @@ const AuthPage: React.FC<AuthPageProps> = ({ users, onLogin, loading }) => {
                     />
                     <span>Remember this device</span>
                   </label>
-
-                  <button
-                    type="button"
-                    onClick={() => setShowSsoPrompt(true)}
-                    className="text-xs font-semibold text-gray-500 dark:text-slate-400 hover:text-gray-800 dark:hover:text-slate-200 flex items-center space-x-1"
-                  >
-                    <ShieldCheckIcon className="w-3.5 h-3.5" />
-                    <span>Use single sign-on (SSO)</span>
-                  </button>
                 </div>
 
                 <button
                   type="submit"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || !isConfigured}
                   className="w-full mt-2 py-3 px-4 rounded-xl bg-[#F06A6A] hover:bg-[#E85555] active:bg-[#D44444] text-white font-bold text-xs sm:text-sm shadow-sm hover:shadow-md transition-all flex items-center justify-center space-x-2 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {isSubmitting ? (
@@ -421,7 +363,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ users, onLogin, loading }) => {
 
                 <button
                   type="submit"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || !isConfigured}
                   className="w-full mt-2 py-3 px-4 rounded-xl bg-[#F06A6A] hover:bg-[#E85555] active:bg-[#D44444] text-white font-bold text-xs sm:text-sm shadow-sm hover:shadow-md transition-all flex items-center justify-center space-x-2 disabled:opacity-60"
                 >
                   {isSubmitting ? (
@@ -436,87 +378,6 @@ const AuthPage: React.FC<AuthPageProps> = ({ users, onLogin, loading }) => {
               </form>
             )}
 
-            {/* DEMO PERSONA SWITCHER */}
-            {authMode === 'demo' && (
-              <div className="space-y-4">
-                <p className="text-xs text-gray-500 dark:text-slate-400">
-                  Choose an existing team member persona to explore different role permissions, workflows, and projects:
-                </p>
-
-                <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
-                  {users.map((user) => {
-                    const isSelected = selectedUserId === user.uid;
-                    const roleColor = 
-                      user.role === 'admin' 
-                        ? 'bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800' 
-                        : user.role === 'manager'
-                        ? 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
-                        : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800';
-
-                    return (
-                      <div
-                        key={user.uid}
-                        onClick={() => setSelectedUserId(user.uid)}
-                        className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
-                          isSelected
-                            ? 'border-[#F06A6A] bg-rose-50/50 dark:bg-rose-950/30 ring-1 ring-[#F06A6A]'
-                            : 'border-gray-200 dark:border-slate-800 hover:border-gray-300 dark:hover:border-slate-700 bg-white dark:bg-slate-900'
-                        }`}
-                      >
-                        <div className="flex items-center space-x-3">
-                          <div className="w-10 h-10 rounded-full bg-[#F06A6A] text-white flex items-center justify-center font-bold text-sm shadow-2xs shrink-0">
-                            {user.displayName ? user.displayName.slice(0, 2).toUpperCase() : 'U'}
-                          </div>
-                          <div>
-                            <div className="flex items-center space-x-2">
-                              <p className="text-xs font-bold text-gray-900 dark:text-white">
-                                {user.displayName}
-                              </p>
-                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border uppercase tracking-wider ${roleColor}`}>
-                                {user.role}
-                              </span>
-                            </div>
-                            <p className="text-[11px] text-gray-400 dark:text-slate-400 mt-0.5">
-                              {user.email} {user.department ? `• ${user.department}` : ''}
-                            </p>
-                          </div>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDemoLogin(user.uid);
-                          }}
-                          className="px-3 py-1.5 text-xs font-bold bg-[#F06A6A] hover:bg-[#E85555] text-white rounded-xl shadow-xs transition-colors flex items-center space-x-1 shrink-0"
-                        >
-                          <span>Log in</span>
-                          <ChevronRightIcon className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <div className="pt-2">
-                  <button
-                    type="button"
-                    onClick={() => handleDemoLogin()}
-                    disabled={!selectedUserId || loading}
-                    className="w-full py-3 px-4 rounded-xl bg-[#F06A6A] hover:bg-[#E85555] active:bg-[#D44444] text-white font-bold text-xs sm:text-sm shadow-sm transition-all flex items-center justify-center space-x-2"
-                  >
-                    {loading ? (
-                      <span className="flex items-center space-x-2">
-                        <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        <span>Launching Workspace...</span>
-                      </span>
-                    ) : (
-                      <span>Launch Asana Workspace</span>
-                    )}
-                  </button>
-                </div>
-              </div>
-            )}
         </div>
       </main>
 
@@ -552,13 +413,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ users, onLogin, loading }) => {
                 </button>
               </div>
             ) : (
-              <form 
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  if (forgotEmail.trim()) setForgotSubmitted(true);
-                }} 
-                className="space-y-4"
-              >
+              <form onSubmit={handleForgotSubmit} className="space-y-4">
                 <p className="text-xs text-gray-500 dark:text-slate-400">
                   Enter your account email address and we'll send you a link to reset your password.
                 </p>
@@ -592,60 +447,6 @@ const AuthPage: React.FC<AuthPageProps> = ({ users, onLogin, loading }) => {
                 </div>
               </form>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* SSO Prompt Modal */}
-      {showSsoPrompt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-          <div className="w-full max-w-md bg-white dark:bg-[#1E1F21] rounded-3xl p-6 sm:p-8 border border-gray-200 dark:border-slate-800 shadow-2xl space-y-4">
-            <div className="flex justify-between items-center">
-              <div className="flex items-center space-x-2">
-                <ShieldCheckIcon className="w-5 h-5 text-[#F06A6A]" />
-                <h3 className="text-base font-bold text-gray-900 dark:text-white">Single Sign-On (SSO)</h3>
-              </div>
-              <button 
-                onClick={() => setShowSsoPrompt(false)}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-white text-sm font-bold"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleSsoSubmit} className="space-y-4">
-              <p className="text-xs text-gray-500 dark:text-slate-400">
-                Enter your company's domain or corporate email to be routed to your organization's Identity Provider (Okta, Azure AD, Google Workspace).
-              </p>
-              <div>
-                <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1">
-                  Company Domain or Work Email
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={ssoDomain}
-                  onChange={(e) => setSsoDomain(e.target.value)}
-                  placeholder="company.com or name@company.com"
-                  className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
-                />
-              </div>
-              <div className="flex items-center space-x-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowSsoPrompt(false)}
-                  className="flex-1 py-2.5 px-4 rounded-xl border border-gray-300 dark:border-slate-700 text-xs font-bold text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2.5 px-4 rounded-xl bg-[#F06A6A] hover:bg-[#E85555] text-white font-bold text-xs"
-                >
-                  Continue with SSO
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}

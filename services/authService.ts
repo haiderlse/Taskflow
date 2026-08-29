@@ -1,209 +1,176 @@
 import { User, AuthCredentials, RegisterData } from '../types';
 import { supabaseService } from './supabaseService';
-import { enhancedApi } from './enhancedApi';
+
+/**
+ * Authentication is Supabase-only.
+ *
+ * There is deliberately no local/demo fallback: a fallback meant an unreachable
+ * project silently signed people into throwaway accounts backed by mock data,
+ * with passwords "hashed" by a reversible string transform. If Supabase is not
+ * configured or not reachable, signing in fails with a message saying so.
+ */
+
+const NOT_CONFIGURED_MESSAGE =
+  'Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env.local and restart the dev server.';
 
 export class AuthService {
   private static currentUser: User | null = null;
   private static sessionToken: string | null = null;
 
-  // Simple password hashing (in production, use bcrypt or similar)
-  private static hashPassword(password: string): string {
-    return btoa(password + 'salt').split('').reverse().join('');
-  }
-
-  private static verifyPassword(password: string, hash: string): boolean {
-    return this.hashPassword(password) === hash;
-  }
-
   private static getEnv() {
     return (import.meta as any).env || {};
   }
 
-  static async login(credentials: AuthCredentials): Promise<{ user: User; token: string }> {
-    try {
-      // Try Supabase auth first
-      const metaEnv = this.getEnv();
-      const supabaseUrl = metaEnv.VITE_SUPABASE_URL;
-      const supabaseKey = metaEnv.VITE_SUPABASE_ANON_KEY;
-      
-      if (supabaseUrl && supabaseKey && supabaseUrl !== 'your_supabase_project_url' && supabaseKey !== 'your_supabase_anon_key') {
-        try {
-          const { user: authUser, session } = await (supabaseService as any).signIn?.(credentials.email, credentials.password) || {};
-          
-          if (authUser && session) {
-            const user = await supabaseService.getUserById(authUser.id);
-            if (!user) {
-              throw new Error('User profile not found');
-            }
-            
-            this.currentUser = user;
-            this.sessionToken = session.access_token;
-            
-            localStorage.setItem('auth_token', session.access_token);
-            localStorage.setItem('current_user', JSON.stringify(user));
-            
-            return { user, token: session.access_token };
-          }
-        } catch (supabaseError) {
-          console.warn('Supabase auth failed, falling back to demo mode:', supabaseError);
-        }
-      }
-      
-      // Fallback to demo mode with enhanced API
-      const users = await enhancedApi.getUsers();
-      const user = users.find(u => u.email === credentials.email);
-      
-      if (!user) {
-        throw new Error('User not found');
-      }
+  /** True when a usable Supabase URL and anon key are present. */
+  static isConfigured(): boolean {
+    const env = this.getEnv();
+    const url = env.VITE_SUPABASE_URL;
+    const key = env.VITE_SUPABASE_ANON_KEY;
+    return Boolean(
+      url &&
+        key &&
+        url !== 'your_supabase_project_url' &&
+        key !== 'your_supabase_anon_key' &&
+        String(url).startsWith('http')
+    );
+  }
 
-      if (!user.isActive) {
-        throw new Error('Account is deactivated');
-      }
+  static configurationMessage(): string {
+    return NOT_CONFIGURED_MESSAGE;
+  }
 
-      if (user.passwordHash && !this.verifyPassword(credentials.password, user.passwordHash)) {
-        throw new Error('Invalid password');
-      }
-
-      // Generate session token
-      const token = btoa(JSON.stringify({ uid: user.uid, timestamp: Date.now() }));
-      
-      this.currentUser = user;
-      this.sessionToken = token;
-      
-      localStorage.setItem('auth_token', token);
-      localStorage.setItem('current_user', JSON.stringify(user));
-
-      await enhancedApi.updateUser(user.uid, { lastLogin: new Date() });
-
-      return { user, token };
-    } catch (error: any) {
-      throw new Error(`Login failed: ${error.message}`);
+  private static requireConfigured() {
+    if (!this.isConfigured() || !supabaseService.available) {
+      throw new Error(NOT_CONFIGURED_MESSAGE);
     }
   }
 
-  static async register(registerData: RegisterData): Promise<{ user: User; token: string }> {
+  /**
+   * Caches the signed-in profile for synchronous reads. The Supabase client owns
+   * the session itself (including refresh); this is only a convenience copy.
+   */
+  private static cacheSession(user: User, token: string) {
+    this.currentUser = user;
+    this.sessionToken = token;
     try {
-      const metaEnv = this.getEnv();
-      const supabaseUrl = metaEnv.VITE_SUPABASE_URL;
-      const supabaseKey = metaEnv.VITE_SUPABASE_ANON_KEY;
-      
-      if (supabaseUrl && supabaseKey && supabaseUrl !== 'your_supabase_project_url' && supabaseKey !== 'your_supabase_anon_key') {
-        try {
-          const { user: authUser, session } = await (supabaseService as any).signUp?.(
-            registerData.email, 
-            registerData.password, 
-            registerData.displayName
-          ) || {};
-          
-          if (authUser && session) {
-            const user = await supabaseService.getUserById(authUser.id);
-            if (!user) {
-              throw new Error('User profile not created');
-            }
-            
-            this.currentUser = user;
-            this.sessionToken = session.access_token;
-            
-            localStorage.setItem('auth_token', session.access_token);
-            localStorage.setItem('current_user', JSON.stringify(user));
-            
-            return { user, token: session.access_token };
-          }
-        } catch (supabaseError) {
-          console.warn('Supabase registration failed, falling back to demo mode:', supabaseError);
-        }
-      }
-      
-      const users = await enhancedApi.getUsers();
-      const existingUser = users.find(u => u.email === registerData.email);
-      
-      if (existingUser) {
-        throw new Error('User with this email already exists');
-      }
-
-      const passwordHash = this.hashPassword(registerData.password);
-      
-      const newUser: Partial<User> = {
-        uid: `user-${Date.now()}`,
-        email: registerData.email,
-        displayName: registerData.displayName,
-        role: registerData.role || 'member',
-        department: registerData.department,
-        passwordHash,
-        workload: 40,
-        isActive: true,
-        createdAt: new Date(),
-        lastLogin: new Date()
-      };
-
-      const createdUser = await enhancedApi.createUser(newUser);
-      const token = btoa(JSON.stringify({ uid: createdUser.uid, timestamp: Date.now() }));
-      
-      this.currentUser = createdUser;
-      this.sessionToken = token;
-      
-      localStorage.setItem('auth_token', token);
-      localStorage.setItem('current_user', JSON.stringify(createdUser));
-
-      return { user: createdUser, token };
-    } catch (error: any) {
-      throw new Error(`Registration failed: ${error.message}`);
+      localStorage.setItem('current_user', JSON.stringify(user));
+    } catch {
+      // Storage can be unavailable; the Supabase client still holds the session.
     }
+  }
+
+  private static clearSession() {
+    this.currentUser = null;
+    this.sessionToken = null;
+    try {
+      localStorage.removeItem('current_user');
+      localStorage.removeItem('auth_token');
+    } catch {
+      // Non-fatal.
+    }
+  }
+
+  static async login(credentials: AuthCredentials): Promise<{ user: User; token: string }> {
+    this.requireConfigured();
+
+    const { user: authUser, session } = await supabaseService.signIn(
+      credentials.email,
+      credentials.password
+    );
+
+    if (!authUser || !session) {
+      throw new Error('Invalid email or password.');
+    }
+
+    const user = await supabaseService.getUserById(authUser.id);
+    if (!user) {
+      throw new Error(
+        'Signed in, but no profile row exists for this account in the users table. Run supabase-schema.sql, then sign up again.'
+      );
+    }
+    if (!user.isActive) {
+      await supabaseService.signOut();
+      throw new Error('This account has been deactivated.');
+    }
+
+    this.cacheSession(user, session.access_token);
+
+    try {
+      await supabaseService.updateUser(user.uid, { lastLogin: new Date() });
+    } catch {
+      // A failed last-login stamp must not block signing in.
+    }
+
+    return { user, token: session.access_token };
+  }
+
+  static async register(registerData: RegisterData): Promise<{ user: User; token: string }> {
+    this.requireConfigured();
+
+    const { user: authUser, session } = await supabaseService.signUp(
+      registerData.email,
+      registerData.password,
+      registerData.displayName
+    );
+
+    if (!authUser) {
+      throw new Error('Sign-up failed. Please try again.');
+    }
+
+    // With "Confirm email" enabled, Supabase returns a user but no session until
+    // the address is verified, so there is nothing to sign in with yet.
+    if (!session) {
+      throw new Error(
+        'Account created. Check your inbox to confirm the email address, then sign in. (To skip this, turn off "Confirm email" in Supabase → Authentication → Providers → Email.)'
+      );
+    }
+
+    const user = await supabaseService.getUserById(authUser.id);
+    if (!user) {
+      throw new Error('Account created, but the profile row was not written. Check that supabase-schema.sql has been run.');
+    }
+
+    this.cacheSession(user, session.access_token);
+    return { user, token: session.access_token };
   }
 
   static async logout(): Promise<void> {
     try {
-      const metaEnv = this.getEnv();
-      const supabaseUrl = metaEnv.VITE_SUPABASE_URL;
-      const supabaseKey = metaEnv.VITE_SUPABASE_ANON_KEY;
-      
-      if (supabaseUrl && supabaseKey && supabaseUrl !== 'your_supabase_project_url' && supabaseKey !== 'your_supabase_anon_key') {
-        try {
-          await (supabaseService as any).signOut?.();
-        } catch (error) {
-          console.warn('Supabase signout error:', error);
-        }
+      if (this.isConfigured() && supabaseService.available) {
+        await supabaseService.signOut();
       }
     } catch (error) {
-      console.warn('Logout error:', error);
+      console.warn('Supabase sign-out error:', error);
     } finally {
-      this.currentUser = null;
-      this.sessionToken = null;
-      localStorage.removeItem('auth_token');
-      localStorage.removeItem('current_user');
+      this.clearSession();
     }
   }
 
+  /**
+   * Restores a session on page load. The Supabase client persists and refreshes
+   * its own token, so this asks it rather than trusting anything in localStorage.
+   */
   static async checkSession(): Promise<User | null> {
+    if (!this.isConfigured() || !supabaseService.available) return null;
+
     try {
-      const token = localStorage.getItem('auth_token');
-      const userData = localStorage.getItem('current_user');
-      
-      if (!token || !userData) {
+      const session = await supabaseService.getSession();
+      if (!session) {
+        this.clearSession();
         return null;
       }
 
-      const user = JSON.parse(userData);
-      const tokenData = JSON.parse(atob(token));
-      
-      if (Date.now() - tokenData.timestamp > 24 * 60 * 60 * 1000) {
+      const user = await supabaseService.getCurrentUser();
+      if (!user || !user.isActive) {
         await this.logout();
         return null;
       }
 
-      const currentUser = await enhancedApi.getUserById(user.uid);
-      if (!currentUser || !currentUser.isActive) {
-        await this.logout();
-        return null;
-      }
-
-      this.currentUser = currentUser;
-      this.sessionToken = token;
-      
-      return currentUser;
+      this.cacheSession(user, session.access_token);
+      return user;
     } catch (error) {
-      await this.logout();
+      console.warn('Session check failed:', error);
+      this.clearSession();
       return null;
     }
   }
@@ -216,25 +183,23 @@ export class AuthService {
     return this.sessionToken;
   }
 
+  /**
+   * Supabase re-authenticates against the active session, so the old password is
+   * not re-checked here; it is verified by signing in before the change.
+   */
   static async changePassword(oldPassword: string, newPassword: string): Promise<void> {
+    this.requireConfigured();
     if (!this.currentUser) {
       throw new Error('Not authenticated');
     }
 
-    const user = this.currentUser;
-    if (user.passwordHash && !this.verifyPassword(oldPassword, user.passwordHash)) {
-      throw new Error('Current password is incorrect');
-    }
-
-    const newPasswordHash = this.hashPassword(newPassword);
-    await enhancedApi.updateUser(user.uid, { passwordHash: newPasswordHash });
-    
-    this.currentUser = { ...user, passwordHash: newPasswordHash };
-    localStorage.setItem('current_user', JSON.stringify(this.currentUser));
+    // Prove the current password before allowing a change.
+    await supabaseService.signIn(this.currentUser.email, oldPassword);
+    await supabaseService.updatePassword(newPassword);
   }
 
   static async resetPassword(email: string): Promise<void> {
-    console.log(`Password reset requested for ${email}`);
-    throw new Error('Password reset functionality would be implemented with email service');
+    this.requireConfigured();
+    await supabaseService.sendPasswordReset(email);
   }
 }

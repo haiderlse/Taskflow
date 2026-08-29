@@ -370,6 +370,26 @@ class SupabaseService {
     if (error) throw error;
   }
 
+  /** The current session, refreshed by the client if it had expired. */
+  async getSession() {
+    const { data, error } = await this.supabase!.auth.getSession();
+    if (error) throw error;
+    return data.session;
+  }
+
+  /** Changes the signed-in user's password. Supabase verifies the active session. */
+  async updatePassword(newPassword: string) {
+    const { error } = await this.supabase!.auth.updateUser({ password: newPassword });
+    if (error) throw error;
+  }
+
+  async sendPasswordReset(email: string) {
+    const { error } = await this.supabase!.auth.resetPasswordForEmail(email, {
+      redirectTo: typeof window !== 'undefined' ? window.location.origin : undefined,
+    });
+    if (error) throw error;
+  }
+
   async getCurrentUser() {
     const { data: { user } } = await this.supabase!.auth.getUser();
     

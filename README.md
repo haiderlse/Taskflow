@@ -65,13 +65,38 @@ npm run build
 npm run preview
 ```
 
-## Demo Mode
+## Creating your account
 
-If Supabase is not configured, the application will automatically fall back to demo mode with mock data. You can still test all features using the demo users:
+Authentication is Supabase-only — there is no demo login and no local fallback.
+Supabase must be configured before anyone can sign in; until it is, the login
+screen says so and the button stays disabled.
 
-- Ali (ali@example.com) - Admin
-- Bob (bob@example.com) - Manager  
-- Charlie (charlie@example.com) - Member
+1. Run `supabase-schema.sql` in the Supabase SQL Editor (creates the tables,
+   including `users` and `calendar_events`, with their RLS policies).
+2. Put your project URL and anon key in `.env.local` (see step 3 above) and
+   restart the dev server.
+3. **Turn off email confirmation** while setting up, or you will not be able to
+   sign in until you click a link: Supabase → Authentication → Providers →
+   Email → uncheck *Confirm email*. Leave it on for anything real.
+4. Open the app, choose **Sign Up**, and register with your email and password.
+
+That creates both the Supabase Auth user and the matching row in the `users`
+table. From then on, **Sign In** with the same credentials.
+
+If you would rather create the account without the app, add the user under
+Supabase → Authentication → Users, then insert the matching profile row:
+
+```sql
+-- Replace the UUID with the id shown for the user in Authentication → Users
+insert into users (uid, email, display_name, role, is_active)
+values ('00000000-0000-0000-0000-000000000000', 'you@example.com', 'Your Name', 'admin', true);
+```
+
+A profile row is required: sign-in fails without one, because the app reads the
+user's role and settings from `users`, not from the auth record.
+
+> Never commit `.env.local` or a password to the repository. `.env.local` is
+> already covered by `.gitignore`.
 
 ## Database Schema
 
@@ -91,9 +116,9 @@ Row Level Security (RLS) is enabled for all tables to ensure data privacy and pr
 ## Features Overview
 
 ### Authentication
-- User registration and login
-- Demo mode for testing
-- Secure session management
+- Supabase Auth sign-up and sign-in; no demo or local-account fallback
+- Sessions owned and refreshed by the Supabase client
+- Password reset by email, and password change re-verified against the current password
 
 ### Project Management
 - Create and organize projects

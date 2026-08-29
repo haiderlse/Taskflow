@@ -392,7 +392,7 @@ const App: React.FC = () => {
     }
 
     if (!currentUser) {
-      return <AuthPage users={users} onLogin={handleLogin} loading={authLoading} />;
+      return <AuthPage onLogin={handleLogin} loading={authLoading} />;
     }
     
     const renderAppContent = () => {

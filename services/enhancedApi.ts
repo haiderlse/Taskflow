@@ -602,7 +602,6 @@ export const enhancedApi = {
       displayName: userData.displayName || '',
       role: userData.role || 'member',
       department: userData.department,
-      passwordHash: userData.passwordHash,
       managerId: userData.managerId,
       approvalLimit: userData.approvalLimit,
       workload: userData.workload || 40,

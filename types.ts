@@ -19,7 +19,6 @@ export interface User {
   isActive: boolean;
   lastLogin?: Date;
   createdAt: Date;
-  passwordHash?: string;
   managerId?: string; // For approval hierarchy
   approvalLimit?: number; // Maximum amount/value this user can approve
 }

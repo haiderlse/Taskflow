@@ -27,8 +27,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 /**
  * `calendar_events.owner_id` is a UUID referencing `users(uid)`, and the RLS
- * policies compare it against `auth.uid()`. Demo users have ids like `user-1`,
- * so they can never satisfy either constraint and must stay on local storage.
+ * policies compare it against `auth.uid()`. Anything that is not a UUID - a
+ * seeded or mock id - can satisfy neither, so it stays on local storage.
  */
 const isRealAuthUser = (userId: string | null): boolean => !!userId && UUID_RE.test(userId);
 
@@ -201,8 +201,8 @@ const seedEvents = (ownerId: string): CalendarEvent[] => {
  *
  *  - `supabase` once `connect()` is called with a real Supabase Auth user, with
  *    a realtime subscription keeping other devices in step.
- *  - `local` otherwise (Supabase unconfigured, or a demo login whose id is not a
- *    UUID and so can never satisfy the table's FK or its RLS policies).
+ *  - `local` otherwise (Supabase unconfigured or unreachable, or a user id that
+ *    is not a UUID and so could never satisfy the table's FK or its RLS policies).
  *
  * Writes apply to the cache first and persist afterwards, so the UI never waits
  * on the network; a failed remote write rolls the cache back and rethrows.

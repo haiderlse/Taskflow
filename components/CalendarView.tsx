@@ -7,13 +7,14 @@ interface CalendarViewProps {
   project?: Project;
   currentUser: User;
   users: User[];
+  onTaskClick?: (task: Task) => void;
 }
 
 interface CalendarTask extends Task {
   user?: User;
 }
 
-const CalendarView: React.FC<CalendarViewProps> = ({ project, currentUser, users }) => {
+const CalendarView: React.FC<CalendarViewProps> = ({ project, currentUser, users, onTaskClick }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [tasks, setTasks] = useState<CalendarTask[]>([]);
   const [loading, setLoading] = useState(true);
@@ -246,12 +247,13 @@ const CalendarView: React.FC<CalendarViewProps> = ({ project, currentUser, users
                   {dayTasks.slice(0, viewMode === 'month' ? 3 : 10).map(task => (
                     <div
                       key={task.id}
-                      className={`text-xs p-1 rounded text-white truncate ${getPriorityColor(task.priority)}`}
+                      onClick={() => onTaskClick?.(task)}
+                      className={`text-xs p-1 rounded text-white truncate cursor-pointer hover:opacity-90 transition-opacity shadow-2xs ${getPriorityColor(task.priority)}`}
                       title={`${task.title} - ${task.user?.displayName || 'Unassigned'}`}
                     >
                       <div className="flex items-center space-x-1">
                         {task.user && (
-                          <div className="w-3 h-3 rounded-full bg-white bg-opacity-30 flex items-center justify-center">
+                          <div className="w-3.5 h-3.5 rounded-full bg-white bg-opacity-30 flex items-center justify-center shrink-0">
                             <span className="text-[8px] font-bold">
                               {task.user.displayName.charAt(0)}
                             </span>

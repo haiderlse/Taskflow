@@ -217,7 +217,9 @@ export const GanttView: React.FC<GanttViewProps> = ({
 
                   <div className="flex items-center space-x-1.5 shrink-0">
                     {hasBlockers && (
-                      <LockClosedIcon className="w-3 h-3 text-red-500" title="Has dependencies" />
+                      <span title="Has dependencies">
+                        <LockClosedIcon className="w-3 h-3 text-red-500" />
+                      </span>
                     )}
                     {assignee ? (
                       <div className="w-5 h-5 bg-yellow-400 text-white rounded-full flex items-center justify-center text-[10px] font-bold">

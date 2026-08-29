@@ -84,20 +84,21 @@ export interface Database {
 }
 
 class SupabaseService {
-  private supabase: SupabaseClient<Database> | null = null;
+  private supabase: any = null;
   private isAvailable = false;
 
   constructor() {
     try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const metaEnv = (import.meta as any).env || {};
+      const supabaseUrl = metaEnv.VITE_SUPABASE_URL;
+      const supabaseKey = metaEnv.VITE_SUPABASE_ANON_KEY;
       
       // Only initialize if we have valid configuration
       if (supabaseUrl && supabaseKey && 
           supabaseUrl !== 'your_supabase_project_url' && 
           supabaseKey !== 'your_supabase_anon_key' &&
           supabaseUrl.startsWith('http')) {
-        this.supabase! = createClient<Database>(supabaseUrl, supabaseKey);
+        this.supabase = createClient(supabaseUrl, supabaseKey);
         this.isAvailable = true;
       } else {
         console.log('Supabase not configured - using demo mode');

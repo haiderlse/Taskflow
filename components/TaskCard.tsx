@@ -85,11 +85,11 @@ const TaskCard: React.FC<TaskCardProps> = ({
     
     switch (task.approval.status) {
       case 'approved':
-        return <CheckCircleIcon className="w-4 h-4 text-green-500" title="Approved" />;
+        return <span title="Approved"><CheckCircleIcon className="w-4 h-4 text-green-500" /></span>;
       case 'rejected':
-        return <XIcon className="w-4 h-4 text-red-500" title="Rejected" />;
+        return <span title="Rejected"><XIcon className="w-4 h-4 text-red-500" /></span>;
       default:
-        return <ClockIcon className="w-4 h-4 text-yellow-500" title="Pending approval" />;
+        return <span title="Pending approval"><ClockIcon className="w-4 h-4 text-yellow-500" /></span>;
     }
   };
 

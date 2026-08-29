@@ -1,6 +1,9 @@
 {
   "name": "TaskFlow: Real-Time Project Management",
-  "description": "A real-time, collaborative project management application inspired by Asana. Manage projects, tasks, and team collaboration seamlessly on a dynamic Kanban board.",
+  "description": "A real-time, collaborative project management application inspired by Asana. Features dynamic Kanban boards, timeline gantt, workload tracking, and Kanban Insights with Cumulative Flow Diagrams for workflow bottleneck visualization.",
   "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ],
   "prompt": ""
 }

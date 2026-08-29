@@ -11,7 +11,8 @@ import {
   SearchIcon, 
   XIcon, 
   ChevronRightIcon, 
-  StarIcon 
+  StarIcon,
+  TrashIcon
 } from './icons';
 
 interface GoalsPageProps {
@@ -110,7 +111,13 @@ export const GoalsPage: React.FC<GoalsPageProps> = ({
         const pct = Math.min(100, Math.round((kr.currentValue / (kr.targetValue || 1)) * 100));
         return sum + pct;
       }, 0);
-      const newProgress = Math.round(totalKrProgress / updatedKrs.length);
+      const newProgress = updatedKrs.length > 0 ? Math.round(totalKrProgress / updatedKrs.length) : 0;
+
+      enhancedApi.updateGoal(goalId, {
+        keyResults: updatedKrs,
+        progress: newProgress,
+        status: newProgress >= 100 ? 'completed' : 'in_progress'
+      });
 
       return {
         ...g,
@@ -118,6 +125,73 @@ export const GoalsPage: React.FC<GoalsPageProps> = ({
         progress: newProgress,
         status: newProgress >= 100 ? 'completed' : 'in_progress',
         updatedAt: new Date(),
+      };
+    }));
+  };
+
+  const handleDeleteGoal = async (goalId: string) => {
+    if (confirm('Are you sure you want to delete this objective?')) {
+      try {
+        await enhancedApi.deleteGoal(goalId);
+        setGoals(prev => prev.filter(g => g.id !== goalId));
+      } catch (err) {
+        console.error('Failed to delete goal', err);
+      }
+    }
+  };
+
+  const handleAddKeyResultToGoal = async (goalId: string) => {
+    const krName = prompt('Enter Key Result title:');
+    if (!krName || !krName.trim()) return;
+    const targetStr = prompt('Enter target value (e.g. 100):', '100');
+    const targetVal = parseFloat(targetStr || '100') || 100;
+    const unit = prompt('Enter unit (e.g. %, stores, users):', '%') || '%';
+
+    const newKr: KeyResult = {
+      id: `kr-${Date.now()}`,
+      name: krName.trim(),
+      targetValue: targetVal,
+      currentValue: 0,
+      unit: unit.trim(),
+      isCompleted: false
+    };
+
+    setGoals(prev => prev.map(g => {
+      if (g.id !== goalId) return g;
+      const updatedKrs = [...g.keyResults, newKr];
+      const totalKrProgress = updatedKrs.reduce((sum, kr) => {
+        const pct = Math.min(100, Math.round((kr.currentValue / (kr.targetValue || 1)) * 100));
+        return sum + pct;
+      }, 0);
+      const newProgress = Math.round(totalKrProgress / updatedKrs.length);
+
+      enhancedApi.updateGoal(goalId, { keyResults: updatedKrs, progress: newProgress });
+
+      return {
+        ...g,
+        keyResults: updatedKrs,
+        progress: newProgress,
+        updatedAt: new Date()
+      };
+    }));
+  };
+
+  const handleRemoveKeyResult = (goalId: string, krId: string) => {
+    setGoals(prev => prev.map(g => {
+      if (g.id !== goalId) return g;
+      const updatedKrs = g.keyResults.filter(kr => kr.id !== krId);
+      const totalKrProgress = updatedKrs.length > 0
+        ? updatedKrs.reduce((sum, kr) => sum + Math.min(100, Math.round((kr.currentValue / (kr.targetValue || 1)) * 100)), 0)
+        : 0;
+      const newProgress = updatedKrs.length > 0 ? Math.round(totalKrProgress / updatedKrs.length) : 0;
+
+      enhancedApi.updateGoal(goalId, { keyResults: updatedKrs, progress: newProgress });
+
+      return {
+        ...g,
+        keyResults: updatedKrs,
+        progress: newProgress,
+        updatedAt: new Date()
       };
     }));
   };
@@ -237,9 +311,19 @@ export const GoalsPage: React.FC<GoalsPageProps> = ({
                     {goal.description && <p className="text-xs text-gray-500">{goal.description}</p>}
                   </div>
 
-                  <div className="text-right shrink-0">
-                    <div className="text-2xl font-black text-blue-600">{goal.progress}%</div>
-                    <span className="text-[11px] text-gray-400 font-medium">Objective Progress</span>
+                  <div className="flex items-center space-x-3 shrink-0">
+                    <div className="text-right">
+                      <div className="text-2xl font-black text-blue-600">{goal.progress}%</div>
+                      <span className="text-[11px] text-gray-400 font-medium">Objective Progress</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteGoal(goal.id)}
+                      className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                      title="Delete Objective"
+                    >
+                      <TrashIcon className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
 
@@ -253,9 +337,19 @@ export const GoalsPage: React.FC<GoalsPageProps> = ({
 
                 {/* Key Results Tracker */}
                 <div className="space-y-3 pt-3 border-t border-gray-100">
-                  <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider">
-                    Key Results ({goal.keyResults.length})
-                  </h4>
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider">
+                      Key Results ({goal.keyResults.length})
+                    </h4>
+                    <button
+                      type="button"
+                      onClick={() => handleAddKeyResultToGoal(goal.id)}
+                      className="text-xs text-blue-600 hover:text-blue-800 font-bold flex items-center space-x-1"
+                    >
+                      <PlusIcon className="w-3.5 h-3.5" />
+                      <span>Add Key Result</span>
+                    </button>
+                  </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {goal.keyResults.map(kr => {
@@ -264,13 +358,23 @@ export const GoalsPage: React.FC<GoalsPageProps> = ({
                       return (
                         <div
                           key={kr.id}
-                          className="p-3.5 rounded-xl bg-slate-50 border border-gray-100 space-y-2"
+                          className="p-3.5 rounded-xl bg-slate-50 border border-gray-100 space-y-2 relative group"
                         >
                           <div className="flex items-center justify-between text-xs">
                             <span className="font-semibold text-gray-800 truncate flex-1 pr-2">{kr.name}</span>
-                            <span className="font-bold text-gray-900 shrink-0">
-                              {kr.currentValue} / {kr.targetValue} {kr.unit} ({krPct}%)
-                            </span>
+                            <div className="flex items-center space-x-2 shrink-0">
+                              <span className="font-bold text-gray-900">
+                                {kr.currentValue} / {kr.targetValue} {kr.unit} ({krPct}%)
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveKeyResult(goal.id, kr.id)}
+                                className="opacity-0 group-hover:opacity-100 p-0.5 text-gray-400 hover:text-red-500 rounded transition-opacity"
+                                title="Remove Key Result"
+                              >
+                                <XIcon className="w-3 h-3" />
+                              </button>
+                            </div>
                           </div>
 
                           {/* Interactive Slider to update key result */}

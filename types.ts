@@ -1,6 +1,6 @@
 
 export type ColumnId = 'To Do' | 'In Progress' | 'Done';
-export type ViewType = 'list' | 'board' | 'calendar' | 'timeline' | 'dashboard' | 'gantt' | 'workload';
+export type ViewType = 'list' | 'board' | 'calendar' | 'timeline' | 'dashboard' | 'gantt' | 'workload' | 'insights';
 export type Priority = 'low' | 'medium' | 'high' | 'critical';
 export type TaskStatus = 'not_started' | 'in_progress' | 'completed' | 'on_hold' | 'cancelled';
 export type UserRole = 'admin' | 'manager' | 'member' | 'viewer';
@@ -36,6 +36,46 @@ export interface RegisterData {
   role?: UserRole;
 }
 
+export type ProjectHealthStatus = 'on_track' | 'at_risk' | 'off_track' | 'on_hold' | 'completed';
+
+export interface ProjectSection {
+  id: string;
+  name: string;
+  order: number;
+  color?: string;
+}
+
+export interface ProjectStatusUpdate {
+  id: string;
+  projectId: string;
+  authorId: string;
+  status: ProjectHealthStatus;
+  title: string;
+  summary: string;
+  blockers?: string;
+  nextSteps?: string;
+  createdAt: Date;
+}
+
+export interface ProjectBriefRole {
+  role: string;
+  userId: string;
+}
+
+export interface ProjectBriefLink {
+  id: string;
+  title: string;
+  url: string;
+  category?: 'design' | 'docs' | 'repo' | 'sheet' | 'chat' | 'other';
+}
+
+export interface ProjectBrief {
+  overview?: string;
+  goals?: string[];
+  roles?: ProjectBriefRole[];
+  links?: ProjectBriefLink[];
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -47,13 +87,35 @@ export interface Project {
   color: string;
   isTemplate: boolean;
   templateId?: string;
+  isFavorite?: boolean;
   status: 'active' | 'on_hold' | 'completed' | 'archived';
+  healthStatus?: ProjectHealthStatus;
+  sections?: ProjectSection[];
+  brief?: ProjectBrief;
+  statusUpdates?: ProjectStatusUpdate[];
   startDate?: Date;
   dueDate?: Date;
   visibility: 'public' | 'private' | 'team';
   customFields: CustomField[];
   tags: string[];
   portfolioId?: string;
+}
+
+export interface TaskRecurrence {
+  frequency: 'daily' | 'weekly' | 'monthly' | 'yearly';
+  interval: number; // e.g. 1 (every 1 week)
+  daysOfWeek?: number[]; // [1, 3, 5] for Mon, Wed, Fri
+  repeatAfterCompletion?: boolean;
+  repeatFrom?: 'due_date' | 'completion_date';
+}
+
+export interface TaskActivity {
+  id: string;
+  taskId: string;
+  userId: string;
+  action: string;
+  details: string;
+  timestamp: Date;
 }
 
 export interface Task {
@@ -63,7 +125,10 @@ export interface Task {
   status: ColumnId;
   taskStatus: TaskStatus;
   projectId: string;
+  projectIds?: string[]; // Multi-homing into multiple projects
+  sectionId?: string;    // Custom section ID within project
   assigneeId: string | null;
+  collaboratorIds?: string[]; // Task followers / collaborators
   createdBy: string;
   dueDate: Date | null;
   startDate: Date | null;
@@ -85,6 +150,8 @@ export interface Task {
   approval?: ApprovalRequest;
   isMilestone?: boolean;
   subtaskItems?: SubtaskItem[];
+  recurrence?: TaskRecurrence;
+  activities?: TaskActivity[];
 }
 
 export interface DependencyInfo {
@@ -120,15 +187,46 @@ export interface Comment {
   attachments?: Attachment[];
 }
 
+export interface CustomFieldOption {
+  id: string;
+  label: string;
+  color?: string;
+}
+
 export interface CustomField {
   id: string;
   name: string;
-  type: 'text' | 'number' | 'date' | 'dropdown' | 'multiselect' | 'checkbox' | 'user' | 'currency';
+  type: 'text' | 'number' | 'date' | 'dropdown' | 'multiselect' | 'checkbox' | 'user' | 'currency' | 'percentage' | 'rating';
   options?: string[];
+  fieldOptions?: CustomFieldOption[];
+  currencyCode?: string; // e.g. '$', '€', '£'
   isRequired: boolean;
   isLocked: boolean;
   createdBy: string;
   createdAt: Date;
+}
+
+export interface ProjectTemplate {
+  id: string;
+  name: string;
+  category: 'agile' | 'marketing' | 'operations' | 'product' | 'engineering' | 'hr' | 'general';
+  description: string;
+  color: string;
+  iconName: string;
+  sections: { name: string; color?: string }[];
+  customFields: CustomField[];
+  sampleTasks: {
+    title: string;
+    description: string;
+    sectionName: string;
+    priority: Priority;
+    daysFromNow: number;
+    estimatedHours?: number;
+    isMilestone?: boolean;
+    tags?: string[];
+    subtasks?: string[];
+  }[];
+  brief?: ProjectBrief;
 }
 
 export interface TimeEntry {
@@ -354,4 +452,36 @@ export interface KeyResult {
   currentValue: number;
   unit: string;
   isCompleted: boolean;
+}
+
+export type NotificationType = 
+  | 'assignment' 
+  | 'comment' 
+  | 'mention' 
+  | 'deadline_approaching' 
+  | 'deadline_overdue' 
+  | 'blocker_cleared' 
+  | 'blocked' 
+  | 'status_change' 
+  | 'approval';
+
+export interface AppNotification {
+  id: string;
+  userId: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  taskId?: string;
+  taskTitle?: string;
+  projectId?: string;
+  projectName?: string;
+  authorId?: string;
+  authorName: string;
+  authorAvatar?: string;
+  timestamp: Date;
+  isRead: boolean;
+  isArchived?: boolean;
+  priority?: Priority;
+  details?: string;
+  meta?: Record<string, any>;
 }

@@ -20,6 +20,7 @@ import InviteModal from './components/InviteModal';
 import UpgradeModal from './components/UpgradeModal';
 import TaskModal from './components/TaskModal';
 import TimesheetsModal from './components/TimesheetsModal';
+import { notificationService } from './services/notificationService';
 import { 
   MenuIcon, 
   PlusIcon, 
@@ -34,7 +35,8 @@ import {
   CheckCircleIcon as ApprovalIcon,
   SearchIcon,
   StarIcon,
-  ClockIcon
+  ClockIcon,
+  AsanaLogo
 } from './components/icons';
 
 // --- Types --- //
@@ -55,6 +57,7 @@ interface SidebarProps {
   onUpgrade: () => void;
   onInvite: () => void;
   onCreateProject: () => void;
+  unreadInboxCount?: number;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ 
@@ -66,17 +69,33 @@ const Sidebar: React.FC<SidebarProps> = ({
   onOpenTimesheet,
   onUpgrade, 
   onInvite, 
-  onCreateProject 
+  onCreateProject,
+  unreadInboxCount = 0
 }) => {
-  const NavItem = ({ icon, label, selected = false, onClick }: { icon: React.ReactNode, label: string, selected?: boolean, onClick?: () => void }) => (
+  const NavItem = ({ 
+    icon, 
+    label, 
+    selected = false, 
+    onClick,
+    badge
+  }: { 
+    icon: React.ReactNode, 
+    label: string, 
+    selected?: boolean, 
+    onClick?: () => void,
+    badge?: React.ReactNode
+  }) => (
     <button 
       onClick={onClick} 
-      className={`w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
+      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
         selected ? 'bg-blue-600 text-white shadow-sm font-bold' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
       }`}
     >
-      {icon}
-      <span>{label}</span>
+      <div className="flex items-center space-x-3 min-w-0">
+        {icon}
+        <span className="truncate">{label}</span>
+      </div>
+      {badge}
     </button>
   );
 
@@ -94,12 +113,12 @@ const Sidebar: React.FC<SidebarProps> = ({
       {/* Brand & Create Row */}
       <div className="flex items-center justify-between p-2 mb-1">
         <div className="flex items-center space-x-2.5">
-          <div className="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center font-black text-white text-sm shadow-sm">
-            A
+          <div className="w-8 h-8 rounded-xl bg-white/10 dark:bg-slate-800 flex items-center justify-center shadow-xs">
+            <AsanaLogo className="w-5 h-5" />
           </div>
           <div>
-            <span className="font-bold text-white text-sm tracking-tight block leading-tight">FlowEnterprise</span>
-            <span className="text-[10px] text-blue-400 font-medium">Asana Workspace</span>
+            <span className="font-bold text-white text-sm tracking-tight block leading-tight">asana</span>
+            <span className="text-[10px] text-rose-400 font-medium">Enterprise Workspace</span>
           </div>
         </div>
         <button 
@@ -131,7 +150,17 @@ const Sidebar: React.FC<SidebarProps> = ({
       <div className="flex-grow overflow-y-auto pr-1 space-y-0.5">
         <NavItem icon={<HomeIcon className="w-4 h-4" />} label="Home Dashboard" selected={currentView.type === 'home'} onClick={() => onNavigate({ type: 'home'})} />
         <NavItem icon={<CheckCircleIcon className="w-4 h-4" />} label="My Tasks" selected={currentView.type === 'my-tasks'} onClick={() => onNavigate({ type: 'my-tasks'})} />
-        <NavItem icon={<InboxIcon className="w-4 h-4" />} label="Activity Inbox" selected={currentView.type === 'inbox'} onClick={() => onNavigate({ type: 'inbox'})} />
+        <NavItem 
+          icon={<InboxIcon className="w-4 h-4" />} 
+          label="Activity Inbox" 
+          selected={currentView.type === 'inbox'} 
+          onClick={() => onNavigate({ type: 'inbox'})} 
+          badge={unreadInboxCount > 0 ? (
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-rose-500 text-white shadow-xs">
+              {unreadInboxCount}
+            </span>
+          ) : undefined}
+        />
         <NavItem icon={<ApprovalIcon className="w-4 h-4" />} label="Approvals" selected={currentView.type === 'approvals'} onClick={() => onNavigate({ type: 'approvals'})} />
         
         {/* Workspace Timesheets Nav Link */}
@@ -161,6 +190,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           >
             <span className={`w-2 h-2 rounded-full shrink-0 ${project.color || 'bg-blue-500'}`} />
             <span className="flex-grow text-left truncate">{project.name}</span>
+            {project.isFavorite && <span className="text-amber-400 text-xs shrink-0" title="Starred">★</span>}
           </button>
         ))}
         
@@ -218,6 +248,7 @@ const App: React.FC = () => {
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
   const [isTimesheetModalOpen, setIsTimesheetModalOpen] = useState(false);
   const [modalTask, setModalTask] = useState<Task | null>(null);
+  const [unreadInboxCount, setUnreadInboxCount] = useState(0);
 
   const loadData = useCallback(async () => {
     try {
@@ -251,6 +282,27 @@ const App: React.FC = () => {
     };
     initializeApp();
   }, [loadData]);
+
+  // Real-time unread notification badge listener
+  useEffect(() => {
+    if (!currentUser) return;
+    const unsubscribe = notificationService.subscribe(currentUser.uid, (notifs) => {
+      const unread = notifs.filter(n => !n.isRead).length;
+      setUnreadInboxCount(unread);
+    });
+    return () => unsubscribe();
+  }, [currentUser]);
+
+  // Automatic deadline monitoring scanner
+  useEffect(() => {
+    if (allTasks.length > 0) {
+      notificationService.scanDeadlines(allTasks, projects);
+      const timer = setInterval(() => {
+        notificationService.scanDeadlines(allTasks, projects);
+      }, 30000);
+      return () => clearInterval(timer);
+    }
+  }, [allTasks, projects]);
 
   const handleLogin = (user: User) => {
     setAuthLoading(true);
@@ -323,7 +375,9 @@ const App: React.FC = () => {
               user={currentUser} 
               projects={projects} 
               users={users} 
-              onCreateProject={handleCreateProject} 
+              onCreateProject={handleCreateProject}
+              onNavigateToProject={(pId) => setCurrentView({ type: 'project', id: pId })}
+              onTaskClick={(t) => setModalTask(t)} 
             />
           );
         case 'project':
@@ -339,7 +393,9 @@ const App: React.FC = () => {
               user={currentUser} 
               projects={projects} 
               users={users} 
-              onCreateProject={handleCreateProject} 
+              onCreateProject={handleCreateProject}
+              onNavigateToProject={(pId) => setCurrentView({ type: 'project', id: pId })}
+              onTaskClick={(t) => setModalTask(t)} 
             />
           );
         case 'my-tasks': 
@@ -355,8 +411,15 @@ const App: React.FC = () => {
           return (
             <InboxPage 
               currentUser={currentUser}
-              onSelectTask={async (taskId) => {
-                const t = allTasks.find(x => x.id === taskId);
+              allTasks={allTasks}
+              projects={projects}
+              users={users}
+              onSelectTask={async (taskId, projectId) => {
+                let t = allTasks.find(x => x.id === taskId);
+                if (!t && projectId) {
+                  const tasks = await mockApi.getTasksForProject(projectId);
+                  t = tasks.find(x => x.id === taskId);
+                }
                 if (t) {
                   setModalTask(t);
                   setCurrentView({ type: 'project', id: t.projectId });
@@ -367,7 +430,7 @@ const App: React.FC = () => {
         case 'approvals': 
           return <ApprovalsPage currentUser={currentUser} users={users} />;
         case 'reporting': 
-          return <ReportingPage currentUser={currentUser} users={users} />;
+          return <ReportingPage currentUser={currentUser} users={users} projects={projects} />;
         case 'portfolios': 
           return (
             <PortfoliosPage 
@@ -403,6 +466,8 @@ const App: React.FC = () => {
               projects={projects} 
               users={users} 
               onCreateProject={handleCreateProject} 
+              onNavigateToProject={(pId) => setCurrentView({ type: 'project', id: pId })}
+              onTaskClick={(t) => setModalTask(t)}
             />
           );
       }
@@ -420,6 +485,7 @@ const App: React.FC = () => {
           onUpgrade={() => setIsUpgradeModalOpen(true)}
           onInvite={() => setIsInviteModalOpen(true)}
           onCreateProject={handleCreateProject}
+          unreadInboxCount={unreadInboxCount}
         />
         <div className="flex-1 flex flex-col bg-white dark:bg-slate-900 overflow-hidden">
           <TopBar 

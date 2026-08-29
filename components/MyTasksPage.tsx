@@ -1971,6 +1971,7 @@ const MyTasksPage: React.FC<MyTasksPageProps> = ({ currentUser, users, projects,
           onClose={() => setSelectedTask(null)}
           onUpdateTask={handleUpdateTask}
           onNavigateToTask={(t) => setSelectedTask(t)}
+          onDeleteTask={(taskId) => handleDeleteTask(taskId)}
         />
       )}
     </div>

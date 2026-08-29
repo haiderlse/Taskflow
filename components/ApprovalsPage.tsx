@@ -3,6 +3,7 @@ import { ApprovalRequest, User } from '../types';
 import { ApprovalService } from '../services/approvalService';
 import { enhancedApi } from '../services/enhancedApi';
 import { ClockIcon, CheckCircleIcon, XIcon } from './icons';
+import { useToast } from '../utils/ux';
 
 interface ApprovalsPageProps {
   currentUser: User;
@@ -10,6 +11,7 @@ interface ApprovalsPageProps {
 }
 
 const ApprovalsPage: React.FC<ApprovalsPageProps> = ({ currentUser, users }) => {
+  const { addToast } = useToast();
   const [pendingApprovals, setPendingApprovals] = useState<ApprovalRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedApproval, setSelectedApproval] = useState<ApprovalRequest | null>(null);
@@ -49,9 +51,18 @@ const ApprovalsPage: React.FC<ApprovalsPageProps> = ({ currentUser, users }) => 
       await loadPendingApprovals();
       setSelectedApproval(null);
       setApprovalComment('');
-    } catch (error) {
+      addToast({
+        type: 'success',
+        title: `Approval ${status === 'approved' ? 'Approved' : 'Rejected'}`,
+        message: 'The task approval decision has been recorded.'
+      });
+    } catch (error: any) {
       console.error('Failed to submit approval:', error);
-      alert('Failed to submit approval: ' + error.message);
+      addToast({
+        type: 'error',
+        title: 'Approval Submission Failed',
+        message: error?.message || 'Failed to submit approval'
+      });
     } finally {
       setIsSubmitting(false);
     }

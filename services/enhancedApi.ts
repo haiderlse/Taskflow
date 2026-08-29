@@ -1,5 +1,25 @@
-import { User, Project, Task, Comment, ColumnId, TimeEntry, Milestone, Portfolio, Goal } from '../types';
+import { 
+  User, 
+  Project, 
+  Task, 
+  Comment, 
+  ColumnId, 
+  TimeEntry, 
+  Milestone, 
+  Portfolio, 
+  Goal,
+  ProjectHealthStatus,
+  ProjectSection,
+  ProjectStatusUpdate,
+  ProjectBrief,
+  ProjectTemplate,
+  CustomField,
+  TaskActivity
+} from '../types';
 import { supabaseService } from './supabaseService';
+import { generateNextRecurringTask, createActivityLog } from '../utils/asanaUtils';
+import { ASANA_TEMPLATES } from '../utils/templatesData';
+import { notificationService } from './notificationService';
 
 // Initialize database connection (for demo, we'll use mock data if Supabase is not available)
 let isSupabaseAvailable = false;
@@ -14,73 +34,193 @@ const USERS: User[] = [
 const PROJECTS: Project[] = [
   { 
     id: 'proj-1', 
-    name: 'AOP 2025-26', 
-    ownerId: 'user-1', 
-    members: ['user-1', 'user-2'], 
-    createdAt: new Date(), 
-    updatedAt: new Date(),
-    color: 'bg-green-500',
-    isTemplate: false,
-    status: 'active',
-    visibility: 'team',
-    customFields: [],
-    tags: ['planning', 'annual']
-  },
-  { 
-    id: 'proj-2', 
-    name: 'Retail Store', 
-    ownerId: 'user-2', 
-    members: ['user-2'], 
-    createdAt: new Date(), 
-    updatedAt: new Date(),
-    color: 'bg-pink-500',
-    isTemplate: false,
-    status: 'active',
-    visibility: 'team',
-    customFields: [],
-    tags: ['retail']
-  },
-  { 
-    id: 'proj-3', 
-    name: 'Shahlimar Franchise', 
-    ownerId: 'user-1', 
-    members: ['user-1'], 
-    createdAt: new Date(), 
-    updatedAt: new Date(),
-    color: 'bg-pink-500',
-    isTemplate: false,
-    status: 'active',
-    visibility: 'team',
-    customFields: [],
-    tags: ['franchise']
-  },
-  { 
-    id: 'proj-4', 
-    name: 'Dvago', 
+    name: 'AOP 2025-26 Enterprise Plan', 
+    description: 'Annual operating plan, financial forecasts, and resource allocation for 2025-2026.',
     ownerId: 'user-1', 
     members: ['user-1', 'user-2', 'user-3'], 
     createdAt: new Date(), 
     updatedAt: new Date(),
-    color: 'bg-gray-400',
+    color: 'bg-emerald-600',
     isTemplate: false,
     status: 'active',
+    healthStatus: 'on_track',
+    sections: [
+      { id: 'sec-101', name: 'Strategic Planning', order: 0, color: 'bg-blue-500' },
+      { id: 'sec-102', name: 'Budget & Financial Modeling', order: 1, color: 'bg-emerald-500' },
+      { id: 'sec-103', name: 'Executive Signoff & Execution', order: 2, color: 'bg-purple-500' },
+    ],
+    brief: {
+      overview: 'Strategic Annual Operating Plan (AOP) for FY25-26 targeting 35% ARR growth and enterprise expansion.',
+      goals: ['Finalize departmental headcount budgets by Nov 30', 'Consolidate tech stack for $120k cost savings', 'Present deck to Board of Directors'],
+      roles: [
+        { role: 'Project Owner', userId: 'user-1' },
+        { role: 'Financial Analyst', userId: 'user-2' },
+        { role: 'Operations Lead', userId: 'user-3' },
+      ],
+      links: [
+        { id: 'l-1', title: 'Financial Modeling Sheet', url: 'https://docs.google.com/spreadsheets', category: 'sheet' },
+        { id: 'l-2', title: 'Board Presentation Pitch Deck', url: 'https://docs.google.com/presentation', category: 'docs' },
+      ]
+    },
+    statusUpdates: [
+      {
+        id: 'su-1',
+        projectId: 'proj-1',
+        authorId: 'user-1',
+        status: 'on_track',
+        title: 'Q3 Financial Audits Complete - Headcount Targets Approved',
+        summary: 'All departmental budgets have passed stage 1 review. We are currently finalizing tech stack renewals.',
+        blockers: 'Awaiting final vendor quotes from cloud provider.',
+        nextSteps: 'Consolidate final numbers into Board pitch deck by Friday.',
+        createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000)
+      }
+    ],
+    visibility: 'team',
+    customFields: [
+      {
+        id: 'cf-budget-est',
+        name: 'Estimated Budget',
+        type: 'currency',
+        currencyCode: '$',
+        isRequired: false,
+        isLocked: false,
+        createdBy: 'user-1',
+        createdAt: new Date()
+      },
+      {
+        id: 'cf-dept',
+        name: 'Department',
+        type: 'dropdown',
+        options: ['Finance', 'Engineering', 'Operations', 'Executive'],
+        isRequired: false,
+        isLocked: false,
+        createdBy: 'user-1',
+        createdAt: new Date()
+      },
+      {
+        id: 'cf-completion-pct',
+        name: 'Completion %',
+        type: 'percentage',
+        isRequired: false,
+        isLocked: false,
+        createdBy: 'user-1',
+        createdAt: new Date()
+      }
+    ],
+    tags: ['planning', 'annual', 'finance']
+  },
+  { 
+    id: 'proj-2', 
+    name: 'Retail Store Digital Hub', 
+    description: 'Retail POS integration and physical franchise storefront inventory rollout.',
+    ownerId: 'user-2', 
+    members: ['user-2', 'user-1'], 
+    createdAt: new Date(), 
+    updatedAt: new Date(),
+    color: 'bg-pink-600',
+    isTemplate: false,
+    status: 'active',
+    healthStatus: 'at_risk',
+    sections: [
+      { id: 'sec-201', name: 'Inventory & POS Setup', order: 0, color: 'bg-amber-500' },
+      { id: 'sec-202', name: 'Staff Training & Onboarding', order: 1, color: 'bg-blue-500' },
+      { id: 'sec-203', name: 'Store Opening & Live Ops', order: 2, color: 'bg-emerald-500' },
+    ],
+    brief: {
+      overview: 'Digital retail expansion across 15 flagship retail locations with unified cloud checkout.',
+      goals: ['Complete hardware install in 15 locations', 'Zero POS downtime during peak hours'],
+      roles: [
+        { role: 'Retail Director', userId: 'user-2' },
+        { role: 'Tech Integrator', userId: 'user-1' }
+      ]
+    },
+    statusUpdates: [
+      {
+        id: 'su-2',
+        projectId: 'proj-2',
+        authorId: 'user-2',
+        status: 'at_risk',
+        title: 'Hardware Delivery Delay on Barcode Scanners',
+        summary: 'Shipment of 30 barcode scanners delayed by 4 business days due to regional customs inspection.',
+        blockers: 'Store 4 and Store 7 opening dates may need to shift by 3 days.',
+        nextSteps: 'Expedite backup inventory from local supplier.',
+        createdAt: new Date(Date.now() - 48 * 60 * 60 * 1000)
+      }
+    ],
+    visibility: 'team',
+    customFields: [
+      {
+        id: 'cf-store-loc',
+        name: 'Location Tier',
+        type: 'dropdown',
+        options: ['Tier 1 Flagship', 'Mall Kiosk', 'Suburban Hub'],
+        isRequired: false,
+        isLocked: false,
+        createdBy: 'user-2',
+        createdAt: new Date()
+      }
+    ],
+    tags: ['retail', 'hardware']
+  },
+  { 
+    id: 'proj-3', 
+    name: 'Shahlimar Franchise Expansion', 
+    ownerId: 'user-1', 
+    members: ['user-1', 'user-3'], 
+    createdAt: new Date(), 
+    updatedAt: new Date(),
+    color: 'bg-purple-600',
+    isTemplate: false,
+    status: 'active',
+    healthStatus: 'on_track',
+    sections: [
+      { id: 'sec-301', name: 'Site Evaluation & Permitting', order: 0, color: 'bg-indigo-500' },
+      { id: 'sec-302', name: 'Fit-out & Architecture', order: 1, color: 'bg-blue-500' },
+      { id: 'sec-303', name: 'Grand Launch', order: 2, color: 'bg-emerald-500' },
+    ],
     visibility: 'team',
     customFields: [],
-    tags: ['tech']
+    tags: ['franchise', 'growth']
+  },
+  { 
+    id: 'proj-4', 
+    name: 'Dvago Omnichannel Platform', 
+    ownerId: 'user-1', 
+    members: ['user-1', 'user-2', 'user-3'], 
+    createdAt: new Date(), 
+    updatedAt: new Date(),
+    color: 'bg-indigo-600',
+    isTemplate: false,
+    status: 'active',
+    healthStatus: 'on_track',
+    sections: [
+      { id: 'sec-401', name: 'Backlog', order: 0, color: 'bg-slate-500' },
+      { id: 'sec-402', name: 'In Development', order: 1, color: 'bg-blue-500' },
+      { id: 'sec-403', name: 'Testing & QA', order: 2, color: 'bg-amber-500' },
+      { id: 'sec-404', name: 'Production Released', order: 3, color: 'bg-emerald-500' },
+    ],
+    visibility: 'team',
+    customFields: [],
+    tags: ['tech', 'platform']
   },
   { 
     id: 'proj-5', 
-    name: 'Mungwao', 
+    name: 'Mungwao Customer Delivery', 
     ownerId: 'user-2', 
     members: ['user-2', 'user-3'], 
     createdAt: new Date(), 
     updatedAt: new Date(),
-    color: 'bg-pink-500',
+    color: 'bg-amber-600',
     isTemplate: false,
     status: 'active',
+    healthStatus: 'on_track',
+    sections: [
+      { id: 'sec-501', name: 'Fleet Ops', order: 0, color: 'bg-blue-500' },
+      { id: 'sec-502', name: 'Route Optimization', order: 1, color: 'bg-emerald-500' },
+    ],
     visibility: 'team',
     customFields: [],
-    tags: []
+    tags: ['logistics']
   },
 ];
 
@@ -401,20 +541,19 @@ const notify = (key: string, data: any) => {
 // Initialize database
 const initializeDatabase = async () => {
   try {
-    // Check if Supabase is properly configured
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    const metaEnv = (import.meta as any).env || {};
+    const supabaseUrl = metaEnv.VITE_SUPABASE_URL;
+    const supabaseKey = metaEnv.VITE_SUPABASE_ANON_KEY;
     
     if (supabaseUrl && supabaseKey && supabaseUrl !== 'your_supabase_project_url' && supabaseKey !== 'your_supabase_anon_key') {
-      // Test connection by trying to get users
       await supabaseService.getUsers();
       isSupabaseAvailable = true;
       console.log('Using Supabase database');
     } else {
-      throw new Error('Supabase not configured');
+      isSupabaseAvailable = false;
     }
   } catch (error) {
-    console.warn('Supabase not available, using mock data:', error);
+    console.warn('Supabase not available, using local store:', error);
     isSupabaseAvailable = false;
   }
 };
@@ -524,38 +663,77 @@ export const enhancedApi = {
     return [...PROJECTS];
   },
 
-  createProject: async (name: string, ownerId: string): Promise<Project> => {
-    await networkDelay(500);
+  createProject: async (nameOrData: string | Partial<Project>, ownerId?: string, extraData?: Partial<Project>): Promise<Project> => {
+    await networkDelay(300);
     
-    if (isSupabaseAvailable) {
-      return await supabaseService.createProject(name, ownerId);
+    let projectData: Partial<Project> = {};
+    if (typeof nameOrData === 'object') {
+      projectData = { ...nameOrData };
+    } else {
+      projectData = {
+        name: nameOrData,
+        ownerId: ownerId || 'user-1',
+        ...extraData
+      };
     }
     
-    const colors = ['bg-green-500', 'bg-pink-500', 'bg-purple-500', 'bg-yellow-500', 'bg-blue-500'];
+    const colors = ['bg-green-500', 'bg-pink-500', 'bg-purple-500', 'bg-yellow-500', 'bg-blue-500', 'bg-indigo-500'];
     const newProject: Project = {
-      id: `proj-${Date.now()}`,
-      name,
-      ownerId,
-      members: [ownerId],
+      id: projectData.id || `proj-${Date.now()}`,
+      name: projectData.name || 'New Project',
+      description: projectData.description || '',
+      ownerId: projectData.ownerId || 'user-1',
+      members: projectData.members || [projectData.ownerId || 'user-1', 'user-2'],
       createdAt: new Date(),
       updatedAt: new Date(),
-      color: colors[PROJECTS.length % colors.length],
-      isTemplate: false,
-      status: 'active',
-      visibility: 'team',
-      customFields: [],
-      tags: [],
+      color: projectData.color || colors[PROJECTS.length % colors.length],
+      isTemplate: !!projectData.isTemplate,
+      status: projectData.status || 'active',
+      healthStatus: projectData.healthStatus || 'on_track',
+      visibility: projectData.visibility || 'team',
+      sections: projectData.sections || [
+        { id: `sec-${Date.now()}-1`, name: 'To Do', order: 0, color: 'bg-blue-500' },
+        { id: `sec-${Date.now()}-2`, name: 'In Progress', order: 1, color: 'bg-amber-500' },
+        { id: `sec-${Date.now()}-3`, name: 'Done', order: 2, color: 'bg-emerald-500' },
+      ],
+      customFields: projectData.customFields || [],
+      tags: projectData.tags || [],
     };
+
+    if (isSupabaseAvailable) {
+      return await supabaseService.createProject(newProject.name, newProject.ownerId);
+    }
     
     PROJECTS.push(newProject);
     return newProject;
+  },
+
+  updateProject: async (projectId: string, updates: Partial<Project>): Promise<Project> => {
+    await networkDelay(200);
+    const index = PROJECTS.findIndex(p => p.id === projectId);
+    if (index === -1) throw new Error('Project not found');
+    PROJECTS[index] = { ...PROJECTS[index], ...updates, updatedAt: new Date() };
+    if (isSupabaseAvailable) {
+      await (supabaseService as any).updateProject?.(projectId, updates);
+    }
+    return PROJECTS[index];
+  },
+
+  deleteProject: async (projectId: string): Promise<boolean> => {
+    await networkDelay(200);
+    const index = PROJECTS.findIndex(p => p.id === projectId);
+    if (index === -1) return false;
+    PROJECTS.splice(index, 1);
+    const remainingTasks = TASKS.filter(t => t.projectId !== projectId);
+    TASKS.length = 0;
+    TASKS.push(...remainingTasks);
+    return true;
   },
 
   // Tasks
   getTasks: async (): Promise<Task[]> => {
     await networkDelay(400);
     if (isSupabaseAvailable) {
-      // MongoDB doesn't have a direct getTasks method, so we'll get all tasks
       const projects = await supabaseService.getProjects();
       const allTasks: Task[] = [];
       for (const project of projects) {
@@ -570,7 +748,6 @@ export const enhancedApi = {
   getTaskById: async (taskId: string): Promise<Task | null> => {
     await networkDelay(200);
     if (isSupabaseAvailable) {
-      // MongoDB doesn't have a direct getTaskById method, so we'll find from all tasks
       const allTasks = await enhancedApi.getTasks();
       return allTasks.find(t => t.id === taskId) || null;
     }
@@ -593,44 +770,102 @@ export const enhancedApi = {
     return TASKS.filter(t => t.projectId === projectId);
   },
 
-  createTask: async (title: string, projectId: string, status: ColumnId): Promise<Task> => {
+  createTask: async (
+    titleOrTask: string | Partial<Task>, 
+    projectId?: string, 
+    status?: ColumnId,
+    extraData?: Partial<Task>
+  ): Promise<Task> => {
     await networkDelay(300);
-    const order = TASKS.filter(t => t.projectId === projectId && t.status === status).length;
+    
+    let taskData: Partial<Task> = {};
+    if (typeof titleOrTask === 'object') {
+      taskData = { ...titleOrTask };
+    } else {
+      taskData = {
+        title: titleOrTask,
+        projectId: projectId || 'proj-1',
+        status: status || 'To Do',
+        ...extraData
+      };
+    }
+
+    const effectiveProjectId = taskData.projectId || 'proj-1';
+    const effectiveStatus = taskData.status || 'To Do';
+    const order = TASKS.filter(t => t.projectId === effectiveProjectId && t.status === effectiveStatus).length;
+
     const newTask: Task = {
-      id: `task-${Date.now()}`,
-      projectId,
-      title,
-      description: '',
-      status,
-      taskStatus: 'not_started',
-      assigneeId: null,
-      createdBy: 'user-1',
-      dueDate: null,
-      startDate: null,
-      completedDate: null,
-      priority: 'medium',
-      order,
-      dependencies: [],
-      blockedBy: [],
-      blocking: [],
-      subtasks: [],
-      timeTracked: 0,
-      customFields: {},
-      tags: [],
-      attachments: [],
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      id: taskData.id || `task-${Date.now()}`,
+      projectId: effectiveProjectId,
+      sectionId: taskData.sectionId,
+      title: taskData.title || 'Untitled Task',
+      description: taskData.description || '',
+      status: effectiveStatus,
+      taskStatus: taskData.taskStatus || 'not_started',
+      assigneeId: taskData.assigneeId !== undefined ? taskData.assigneeId : null,
+      collaboratorIds: taskData.collaboratorIds || [],
+      createdBy: taskData.createdBy || 'user-1',
+      dueDate: taskData.dueDate || null,
+      startDate: taskData.startDate || null,
+      completedDate: taskData.completedDate || null,
+      priority: taskData.priority || 'medium',
+      order: taskData.order !== undefined ? taskData.order : order,
+      dependencies: taskData.dependencies || [],
+      blockedBy: taskData.blockedBy || taskData.dependencies || [],
+      blocking: taskData.blocking || [],
+      subtasks: taskData.subtasks || [],
+      subtaskItems: taskData.subtaskItems || [],
+      timeTracked: taskData.timeTracked || 0,
+      estimatedTime: taskData.estimatedTime || 0,
+      customFields: taskData.customFields || {},
+      tags: taskData.tags || [],
+      attachments: taskData.attachments || [],
+      isMilestone: !!taskData.isMilestone,
+      recurrence: taskData.recurrence,
+      createdAt: taskData.createdAt || new Date(),
+      updatedAt: taskData.updatedAt || new Date(),
     };
     
     if (isSupabaseAvailable) {
       const created = await supabaseService.createTask(newTask);
-      notify(`tasks:${projectId}`, await supabaseService.getTasksForProject(projectId));
+      notify(`tasks:${effectiveProjectId}`, await supabaseService.getTasksForProject(effectiveProjectId));
+      if (newTask.assigneeId) {
+        const creator = USERS.find(u => u.uid === newTask.createdBy) || { uid: newTask.createdBy, displayName: 'Team Member' };
+        const project = PROJECTS.find(p => p.id === effectiveProjectId);
+        notificationService.notifyTaskAssignment(newTask, creator, { uid: newTask.assigneeId }, project);
+      }
       return created;
     }
     
     TASKS.push(newTask);
-    notify(`tasks:${projectId}`, TASKS.filter(t => t.projectId === projectId));
+    notify(`tasks:${effectiveProjectId}`, TASKS.filter(t => t.projectId === effectiveProjectId));
+
+    if (newTask.assigneeId) {
+      const creator = USERS.find(u => u.uid === newTask.createdBy) || { uid: newTask.createdBy, displayName: 'Team Member' };
+      const project = PROJECTS.find(p => p.id === effectiveProjectId);
+      notificationService.notifyTaskAssignment(newTask, creator, { uid: newTask.assigneeId }, project);
+    }
     return newTask;
+  },
+
+  deleteTask: async (taskId: string): Promise<boolean> => {
+    await networkDelay(200);
+    const taskIndex = TASKS.findIndex(t => t.id === taskId);
+    if (taskIndex === -1) return false;
+    const task = TASKS[taskIndex];
+    TASKS.splice(taskIndex, 1);
+    
+    TASKS.forEach(t => {
+      if (t.blockedBy) t.blockedBy = t.blockedBy.filter(id => id !== taskId);
+      if (t.dependencies) t.dependencies = t.dependencies.filter(id => id !== taskId);
+      if (t.blocking) t.blocking = t.blocking.filter(id => id !== taskId);
+    });
+    
+    if (isSupabaseAvailable) {
+      await (supabaseService as any).deleteTask?.(taskId);
+    }
+    notify(`tasks:${task.projectId}`, TASKS.filter(t => t.projectId === task.projectId));
+    return true;
   },
 
   updateTask: async (taskId: string, updates: Partial<Task>): Promise<Task> => {
@@ -707,8 +942,54 @@ export const enhancedApi = {
       });
     }
 
+    // Auto-create next recurring task if task completed
+    if (updates.status === 'Done' && originalTask.status !== 'Done' && originalTask.recurrence) {
+      const nextTask = generateNextRecurringTask(originalTask, originalTask.assigneeId || 'user-1');
+      if (nextTask) {
+        TASKS.push(nextTask);
+        setTimeout(() => {
+          notify(`tasks:${originalTask.projectId}`, TASKS.filter(t => t.projectId === originalTask.projectId));
+        }, 100);
+      }
+    }
+
     TASKS[taskIndex] = { ...originalTask, ...normalizedUpdates, updatedAt: new Date() };
+    const updatedTask = TASKS[taskIndex];
     
+    // Trigger notification if assignee was changed
+    if (updates.assigneeId && updates.assigneeId !== originalTask.assigneeId) {
+      const project = PROJECTS.find(p => p.id === updatedTask.projectId);
+      notificationService.notifyTaskAssignment(
+        updatedTask, 
+        { uid: 'user-1', displayName: 'Team Member' }, 
+        { uid: updates.assigneeId }, 
+        project
+      );
+    }
+
+    // Trigger notification if task completed unblocks dependent tasks
+    if (updates.status === 'Done' && originalTask.status !== 'Done') {
+      const dependents = TASKS.filter(t => 
+        (t.blockedBy && t.blockedBy.includes(taskId)) || 
+        (t.dependencies && t.dependencies.includes(taskId))
+      );
+      dependents.forEach(depTask => {
+        if (depTask.assigneeId) {
+          notificationService.createNotification({
+            userId: depTask.assigneeId,
+            type: 'blocker_cleared',
+            title: '🔓 Prerequisite Unblocked',
+            message: `"${originalTask.title}" was completed. You can now begin work on "${depTask.title}".`,
+            taskId: depTask.id,
+            taskTitle: depTask.title,
+            projectId: depTask.projectId,
+            authorName: 'System Monitor',
+            priority: depTask.priority || 'medium'
+          });
+        }
+      });
+    }
+
     if (updates.status && updates.status !== originalTask.status) {
         TASKS.filter(t => t.projectId === originalTask.projectId && t.status === originalTask.status)
              .sort((a,b) => a.order - b.order)
@@ -816,8 +1097,8 @@ export const enhancedApi = {
       createdAt: new Date()
     };
     
-    if (isSupabaseAvailable) {
-      return await supabaseService.createTimeEntry(newEntry);
+    if (isSupabaseAvailable && (supabaseService as any).createTimeEntry) {
+      return await (supabaseService as any).createTimeEntry(newEntry);
     }
     
     TIME_ENTRIES.push(newEntry);
@@ -833,8 +1114,8 @@ export const enhancedApi = {
 
   getTimeEntriesForTask: async (taskId: string): Promise<TimeEntry[]> => {
     await networkDelay(200);
-    if (isSupabaseAvailable) {
-      return await supabaseService.getTimeEntriesForTask(taskId);
+    if (isSupabaseAvailable && (supabaseService as any).getTimeEntriesForTask) {
+      return await (supabaseService as any).getTimeEntriesForTask(taskId);
     }
     return TIME_ENTRIES.filter(e => e.taskId === taskId);
   },
@@ -885,8 +1166,8 @@ export const enhancedApi = {
   // Milestones
   getMilestonesForProject: async (projectId: string): Promise<Milestone[]> => {
     await networkDelay(300);
-    if (isSupabaseAvailable) {
-      return await supabaseService.getMilestonesForProject(projectId);
+    if (isSupabaseAvailable && (supabaseService as any).getMilestonesForProject) {
+      return await (supabaseService as any).getMilestonesForProject(projectId);
     }
     return MILESTONES.filter(m => m.projectId === projectId);
   },
@@ -905,8 +1186,8 @@ export const enhancedApi = {
       createdAt: new Date()
     };
     
-    if (isSupabaseAvailable) {
-      return await supabaseService.createMilestone(newMilestone);
+    if (isSupabaseAvailable && (supabaseService as any).createMilestone) {
+      return await (supabaseService as any).createMilestone(newMilestone);
     }
     
     MILESTONES.push(newMilestone);
@@ -916,8 +1197,8 @@ export const enhancedApi = {
   // Portfolios
   getPortfolios: async (): Promise<Portfolio[]> => {
     await networkDelay(300);
-    if (isSupabaseAvailable) {
-      return await supabaseService.getPortfolios();
+    if (isSupabaseAvailable && (supabaseService as any).getPortfolios) {
+      return await (supabaseService as any).getPortfolios();
     }
     return [...PORTFOLIOS];
   },
@@ -935,19 +1216,46 @@ export const enhancedApi = {
       createdAt: new Date()
     };
     
-    if (isSupabaseAvailable) {
-      return await supabaseService.createPortfolio(newPortfolio);
+    if (isSupabaseAvailable && (supabaseService as any).createPortfolio) {
+      return await (supabaseService as any).createPortfolio(newPortfolio);
     }
     
     PORTFOLIOS.push(newPortfolio);
     return newPortfolio;
   },
 
+  updatePortfolio: async (portfolioId: string, updates: Partial<Portfolio>): Promise<Portfolio> => {
+    await networkDelay(200);
+    const idx = PORTFOLIOS.findIndex(p => p.id === portfolioId);
+    if (idx !== -1) {
+      PORTFOLIOS[idx] = { ...PORTFOLIOS[idx], ...updates };
+      return PORTFOLIOS[idx];
+    }
+    const updated: Portfolio = {
+      id: portfolioId,
+      name: updates.name || 'Portfolio',
+      description: updates.description,
+      ownerId: updates.ownerId || 'user-1',
+      projects: updates.projects || [],
+      goals: updates.goals || [],
+      status: updates.status || 'active',
+      createdAt: new Date(),
+      ...updates,
+    };
+    PORTFOLIOS.push(updated);
+    return updated;
+  },
+
+  deletePortfolio: async (portfolioId: string): Promise<void> => {
+    await networkDelay(200);
+    PORTFOLIOS = PORTFOLIOS.filter(p => p.id !== portfolioId);
+  },
+
   // Goals
   getGoals: async (): Promise<Goal[]> => {
     await networkDelay(300);
-    if (isSupabaseAvailable) {
-      return await supabaseService.getGoals();
+    if (isSupabaseAvailable && (supabaseService as any).getGoals) {
+      return await (supabaseService as any).getGoals();
     }
     return [...GOALS];
   },
@@ -968,19 +1276,48 @@ export const enhancedApi = {
       updatedAt: new Date()
     };
     
-    if (isSupabaseAvailable) {
-      return await supabaseService.createGoal(newGoal);
+    if (isSupabaseAvailable && (supabaseService as any).createGoal) {
+      return await (supabaseService as any).createGoal(newGoal);
     }
     
     GOALS.push(newGoal);
     return newGoal;
   },
 
+  updateGoal: async (goalId: string, updates: Partial<Goal>): Promise<Goal> => {
+    await networkDelay(200);
+    const idx = GOALS.findIndex(g => g.id === goalId);
+    if (idx !== -1) {
+      GOALS[idx] = { ...GOALS[idx], ...updates, updatedAt: new Date() };
+      return GOALS[idx];
+    }
+    const updated: Goal = {
+      id: goalId,
+      name: updates.name || 'Goal',
+      description: updates.description,
+      ownerId: updates.ownerId || 'user-1',
+      targetDate: updates.targetDate || new Date(),
+      status: updates.status || 'in_progress',
+      progress: updates.progress || 0,
+      keyResults: updates.keyResults || [],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...updates,
+    };
+    GOALS.push(updated);
+    return updated;
+  },
+
+  deleteGoal: async (goalId: string): Promise<void> => {
+    await networkDelay(200);
+    GOALS = GOALS.filter(g => g.id !== goalId);
+  },
+
   // Comments
   getCommentsForTask: async (taskId: string): Promise<Comment[]> => {
     await networkDelay(300);
-    if (isSupabaseAvailable) {
-      return await supabaseService.getCommentsForTask(taskId);
+    if (isSupabaseAvailable && (supabaseService as any).getCommentsForTask) {
+      return await (supabaseService as any).getCommentsForTask(taskId);
     }
     return COMMENTS.filter(c => c.taskId === taskId).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   },
@@ -997,14 +1334,25 @@ export const enhancedApi = {
       updatedAt: new Date(),
     };
     
-    if (isSupabaseAvailable) {
-      const created = await supabaseService.addComment(newComment);
-      notify(`comments:${taskId}`, await supabaseService.getCommentsForTask(taskId));
+    const author = USERS.find(u => u.uid === userId) || { uid: userId, displayName: 'Team Member' };
+    const task = TASKS.find(t => t.id === taskId);
+    const project = task ? PROJECTS.find(p => p.id === task.projectId) : undefined;
+
+    if (isSupabaseAvailable && (supabaseService as any).addComment) {
+      const created = await (supabaseService as any).addComment(newComment);
+      notify(`comments:${taskId}`, await (supabaseService as any).getCommentsForTask(taskId));
+      if (task) {
+        notificationService.notifyCommentAdded(created, task, author, USERS, project);
+      }
       return created;
     }
     
     COMMENTS.push(newComment);
     notify(`comments:${taskId}`, COMMENTS.filter(c => c.taskId === taskId).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()));
+    
+    if (task) {
+      notificationService.notifyCommentAdded(newComment, task, author, USERS, project);
+    }
     return newComment;
   },
 
@@ -1059,6 +1407,299 @@ export const enhancedApi = {
       weeklyTimeTracked,
       weeklyUtilization: (weeklyTimeTracked / (40 * 60)) * 100 // assuming 40 hour work week
     };
+  },
+
+  // Project Templates
+  getTemplates: async (): Promise<ProjectTemplate[]> => {
+    await networkDelay(200);
+    return ASANA_TEMPLATES;
+  },
+
+  createProjectFromTemplate: async (templateId: string, projectName: string, ownerId: string): Promise<Project> => {
+    await networkDelay(400);
+    const template = ASANA_TEMPLATES.find(t => t.id === templateId) || ASANA_TEMPLATES[0];
+    
+    const newProjectId = `proj-${Date.now()}`;
+    const sections: ProjectSection[] = template.sections.map((s, idx) => ({
+      id: `sec-${Date.now()}-${idx}`,
+      name: s.name,
+      order: idx,
+      color: s.color || 'bg-blue-500'
+    }));
+
+    const newProject: Project = {
+      id: newProjectId,
+      name: projectName,
+      description: template.description,
+      ownerId,
+      members: [ownerId, 'user-2', 'user-3'],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      color: template.color,
+      isTemplate: false,
+      templateId: template.id,
+      status: 'active',
+      healthStatus: 'on_track',
+      sections,
+      brief: template.brief ? { ...template.brief } : undefined,
+      statusUpdates: [
+        {
+          id: `su-${Date.now()}`,
+          projectId: newProjectId,
+          authorId: ownerId,
+          status: 'on_track',
+          title: `Project Initialized from ${template.name}`,
+          summary: `Created project with ${sections.length} workflow sections and pre-configured custom fields.`,
+          createdAt: new Date()
+        }
+      ],
+      visibility: 'team',
+      customFields: [...template.customFields],
+      tags: [template.category]
+    };
+
+    PROJECTS.push(newProject);
+
+    // Create sample tasks
+    template.sampleTasks.forEach((sample, i) => {
+      const section = sections.find(s => s.name === sample.sectionName) || sections[0];
+      const dueDate = new Date();
+      dueDate.setDate(dueDate.getDate() + (sample.daysFromNow || 2));
+      const startDate = new Date();
+
+      const newTask: Task = {
+        id: `task-${Date.now()}-${i}`,
+        projectId: newProjectId,
+        sectionId: section?.id,
+        title: sample.title,
+        description: sample.description,
+        status: section?.name.toLowerCase().includes('done') || section?.name.toLowerCase().includes('release') ? 'Done' : 'To Do',
+        taskStatus: 'not_started',
+        assigneeId: ownerId,
+        collaboratorIds: [ownerId, 'user-2'],
+        createdBy: ownerId,
+        dueDate,
+        startDate,
+        completedDate: null,
+        priority: sample.priority || 'medium',
+        order: i,
+        dependencies: [],
+        blockedBy: [],
+        blocking: [],
+        subtasks: sample.subtasks || [],
+        subtaskItems: (sample.subtasks || []).map((st, sidx) => ({
+          id: `st-${Date.now()}-${i}-${sidx}`,
+          title: st,
+          isCompleted: false
+        })),
+        timeTracked: 0,
+        estimatedTime: sample.estimatedHours ? sample.estimatedHours * 60 : 120,
+        customFields: {},
+        tags: sample.tags || [],
+        attachments: [],
+        isMilestone: !!sample.isMilestone,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+      TASKS.push(newTask);
+    });
+
+    notify(`tasks:${newProjectId}`, TASKS.filter(t => t.projectId === newProjectId));
+    return newProject;
+  },
+
+  saveProjectAsTemplate: async (projectId: string, templateName: string, category: 'agile' | 'marketing' | 'operations' | 'product' | 'engineering' | 'hr' | 'general', description: string): Promise<ProjectTemplate> => {
+    await networkDelay(300);
+    const proj = PROJECTS.find(p => p.id === projectId);
+    const projTasks = TASKS.filter(t => t.projectId === projectId);
+
+    const newTemplate: ProjectTemplate = {
+      id: `template-${Date.now()}`,
+      name: templateName,
+      category,
+      description,
+      color: proj?.color || 'bg-blue-600',
+      iconName: 'FolderIcon',
+      sections: (proj?.sections || [{ id: '1', name: 'To Do', order: 0 }, { id: '2', name: 'In Progress', order: 1 }, { id: '3', name: 'Done', order: 2 }]).map(s => ({ name: s.name, color: s.color })),
+      customFields: proj?.customFields || [],
+      brief: proj?.brief,
+      sampleTasks: projTasks.slice(0, 5).map(t => {
+        const sec = proj?.sections?.find(s => s.id === t.sectionId);
+        return {
+          title: t.title,
+          description: t.description,
+          sectionName: sec?.name || 'To Do',
+          priority: t.priority,
+          daysFromNow: 3,
+          estimatedHours: t.estimatedTime ? t.estimatedTime / 60 : 2,
+          isMilestone: t.isMilestone,
+          tags: t.tags
+        };
+      })
+    };
+
+    ASANA_TEMPLATES.push(newTemplate);
+    return newTemplate;
+  },
+
+  // Project Sections
+  addProjectSection: async (projectId: string, name: string, color?: string): Promise<ProjectSection> => {
+    await networkDelay(200);
+    const project = PROJECTS.find(p => p.id === projectId);
+    if (!project) throw new Error('Project not found');
+
+    if (!project.sections) {
+      project.sections = [
+        { id: `sec-${Date.now()}-1`, name: 'To Do', order: 0, color: 'bg-blue-500' },
+        { id: `sec-${Date.now()}-2`, name: 'In Progress', order: 1, color: 'bg-amber-500' },
+        { id: `sec-${Date.now()}-3`, name: 'Done', order: 2, color: 'bg-emerald-500' },
+      ];
+    }
+
+    const newSection: ProjectSection = {
+      id: `sec-${Date.now()}`,
+      name,
+      order: project.sections.length,
+      color: color || 'bg-blue-500'
+    };
+
+    project.sections.push(newSection);
+    return newSection;
+  },
+
+  updateProjectSection: async (projectId: string, sectionId: string, updates: Partial<ProjectSection>): Promise<ProjectSection> => {
+    await networkDelay(150);
+    const project = PROJECTS.find(p => p.id === projectId);
+    if (!project || !project.sections) throw new Error('Project or sections not found');
+
+    const sec = project.sections.find(s => s.id === sectionId);
+    if (!sec) throw new Error('Section not found');
+
+    Object.assign(sec, updates);
+    return sec;
+  },
+
+  deleteProjectSection: async (projectId: string, sectionId: string): Promise<boolean> => {
+    await networkDelay(150);
+    const project = PROJECTS.find(p => p.id === projectId);
+    if (!project || !project.sections) return false;
+
+    project.sections = project.sections.filter(s => s.id !== sectionId);
+    // Unassign tasks from this section
+    TASKS.filter(t => t.projectId === projectId && t.sectionId === sectionId).forEach(t => {
+      t.sectionId = undefined;
+    });
+    return true;
+  },
+
+  // Project Status Updates & Health
+  addStatusUpdate: async (projectId: string, update: Partial<ProjectStatusUpdate>): Promise<ProjectStatusUpdate> => {
+    await networkDelay(250);
+    const project = PROJECTS.find(p => p.id === projectId);
+    if (!project) throw new Error('Project not found');
+
+    const newUpdate: ProjectStatusUpdate = {
+      id: `su-${Date.now()}`,
+      projectId,
+      authorId: update.authorId || 'user-1',
+      status: update.status || 'on_track',
+      title: update.title || 'Status Update',
+      summary: update.summary || '',
+      blockers: update.blockers,
+      nextSteps: update.nextSteps,
+      createdAt: new Date()
+    };
+
+    if (!project.statusUpdates) project.statusUpdates = [];
+    project.statusUpdates.unshift(newUpdate);
+    project.healthStatus = newUpdate.status;
+
+    return newUpdate;
+  },
+
+  updateProjectBrief: async (projectId: string, briefUpdates: Partial<ProjectBrief>): Promise<ProjectBrief> => {
+    await networkDelay(200);
+    const project = PROJECTS.find(p => p.id === projectId);
+    if (!project) throw new Error('Project not found');
+
+    project.brief = {
+      ...(project.brief || { overview: '', goals: [], roles: [], links: [] }),
+      ...briefUpdates
+    };
+
+    return project.brief;
+  },
+
+  setProjectHealthStatus: async (projectId: string, healthStatus: ProjectHealthStatus): Promise<Project> => {
+    await networkDelay(150);
+    const project = PROJECTS.find(p => p.id === projectId);
+    if (!project) throw new Error('Project not found');
+    project.healthStatus = healthStatus;
+    return project;
+  },
+
+  addProjectCustomField: async (projectId: string, field: Partial<CustomField>): Promise<CustomField> => {
+    await networkDelay(200);
+    const project = PROJECTS.find(p => p.id === projectId);
+    if (!project) throw new Error('Project not found');
+
+    const newField: CustomField = {
+      id: `cf-${Date.now()}`,
+      name: field.name || 'New Custom Field',
+      type: field.type || 'text',
+      options: field.options || [],
+      fieldOptions: field.fieldOptions || [],
+      currencyCode: field.currencyCode || '$',
+      isRequired: !!field.isRequired,
+      isLocked: false,
+      createdBy: field.createdBy || 'user-1',
+      createdAt: new Date()
+    };
+
+    if (!project.customFields) project.customFields = [];
+    project.customFields.push(newField);
+    return newField;
+  },
+
+  // Notifications API
+  getNotifications: (userId: string) => {
+    return notificationService.getNotifications(userId);
+  },
+
+  getUnreadNotificationsCount: (userId: string) => {
+    return notificationService.getUnreadCount(userId);
+  },
+
+  subscribeToNotifications: (userId: string, callback: (notifications: any[]) => void) => {
+    return notificationService.subscribe(userId, callback);
+  },
+
+  markNotificationAsRead: (notificationId: string, userId?: string) => {
+    notificationService.markAsRead(notificationId, userId);
+  },
+
+  markNotificationAsUnread: (notificationId: string, userId?: string) => {
+    notificationService.markAsUnread(notificationId, userId);
+  },
+
+  markAllNotificationsAsRead: (userId: string) => {
+    notificationService.markAllAsRead(userId);
+  },
+
+  archiveNotification: (notificationId: string, userId?: string) => {
+    notificationService.archiveNotification(notificationId, userId);
+  },
+
+  clearAllNotifications: (userId: string) => {
+    notificationService.clearAll(userId);
+  },
+
+  scanDeadlines: (tasks?: Task[], projects?: Project[]) => {
+    notificationService.scanDeadlines(tasks || TASKS, projects || PROJECTS);
+  },
+
+  simulateNotification: (user: User, type: any) => {
+    return notificationService.simulateLiveNotification(user, type, TASKS, USERS);
   }
 };
 

@@ -89,7 +89,10 @@ export const CreateModal: React.FC<CreateModalProps> = ({
         if (onTaskCreated) onTaskCreated();
       } else if (activeType === 'project') {
         if (!projectName.trim()) return;
-        const newProj = await enhancedApi.createProject(projectName, currentUser?.uid || 'user-1');
+        const newProj = await enhancedApi.createProject(projectName, currentUser?.uid || 'user-1', {
+          description: projectDesc,
+          color: projectColor
+        });
         if (onProjectCreated) onProjectCreated(newProj);
       } else if (activeType === 'goal') {
         if (!goalName.trim()) return;

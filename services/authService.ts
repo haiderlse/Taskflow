@@ -1,5 +1,6 @@
 import { User, AuthCredentials, RegisterData } from '../types';
 import { supabaseService } from './supabaseService';
+import { enhancedApi } from './enhancedApi';
 
 export class AuthService {
   private static currentUser: User | null = null;
@@ -7,7 +8,6 @@ export class AuthService {
 
   // Simple password hashing (in production, use bcrypt or similar)
   private static hashPassword(password: string): string {
-    // This is a simple hash for demo purposes - use proper hashing in production
     return btoa(password + 'salt').split('').reverse().join('');
   }
 
@@ -15,15 +15,20 @@ export class AuthService {
     return this.hashPassword(password) === hash;
   }
 
+  private static getEnv() {
+    return (import.meta as any).env || {};
+  }
+
   static async login(credentials: AuthCredentials): Promise<{ user: User; token: string }> {
     try {
       // Try Supabase auth first
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const metaEnv = this.getEnv();
+      const supabaseUrl = metaEnv.VITE_SUPABASE_URL;
+      const supabaseKey = metaEnv.VITE_SUPABASE_ANON_KEY;
       
       if (supabaseUrl && supabaseKey && supabaseUrl !== 'your_supabase_project_url' && supabaseKey !== 'your_supabase_anon_key') {
         try {
-          const { user: authUser, session } = await supabaseService.signIn(credentials.email, credentials.password);
+          const { user: authUser, session } = await (supabaseService as any).signIn?.(credentials.email, credentials.password) || {};
           
           if (authUser && session) {
             const user = await supabaseService.getUserById(authUser.id);
@@ -34,7 +39,6 @@ export class AuthService {
             this.currentUser = user;
             this.sessionToken = session.access_token;
             
-            // Store in localStorage for persistence
             localStorage.setItem('auth_token', session.access_token);
             localStorage.setItem('current_user', JSON.stringify(user));
             
@@ -46,7 +50,6 @@ export class AuthService {
       }
       
       // Fallback to demo mode with enhanced API
-      const { enhancedApi } = await import('./enhancedApi');
       const users = await enhancedApi.getUsers();
       const user = users.find(u => u.email === credentials.email);
       
@@ -58,44 +61,40 @@ export class AuthService {
         throw new Error('Account is deactivated');
       }
 
-      // For demo purposes, if user doesn't have a password hash, accept any password
-      // In production, all users should have proper password hashes
       if (user.passwordHash && !this.verifyPassword(credentials.password, user.passwordHash)) {
         throw new Error('Invalid password');
       }
 
-      // Update last login
-      await enhancedApi.updateUser(user.uid, { lastLogin: new Date() });
-
-      // Generate session token (in production, use JWT or similar)
+      // Generate session token
       const token = btoa(JSON.stringify({ uid: user.uid, timestamp: Date.now() }));
       
       this.currentUser = user;
       this.sessionToken = token;
       
-      // Store in localStorage for persistence
       localStorage.setItem('auth_token', token);
       localStorage.setItem('current_user', JSON.stringify(user));
 
+      await enhancedApi.updateUser(user.uid, { lastLogin: new Date() });
+
       return { user, token };
-    } catch (error) {
+    } catch (error: any) {
       throw new Error(`Login failed: ${error.message}`);
     }
   }
 
   static async register(registerData: RegisterData): Promise<{ user: User; token: string }> {
     try {
-      // Try Supabase auth first
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const metaEnv = this.getEnv();
+      const supabaseUrl = metaEnv.VITE_SUPABASE_URL;
+      const supabaseKey = metaEnv.VITE_SUPABASE_ANON_KEY;
       
       if (supabaseUrl && supabaseKey && supabaseUrl !== 'your_supabase_project_url' && supabaseKey !== 'your_supabase_anon_key') {
         try {
-          const { user: authUser, session } = await supabaseService.signUp(
+          const { user: authUser, session } = await (supabaseService as any).signUp?.(
             registerData.email, 
             registerData.password, 
             registerData.displayName
-          );
+          ) || {};
           
           if (authUser && session) {
             const user = await supabaseService.getUserById(authUser.id);
@@ -106,7 +105,6 @@ export class AuthService {
             this.currentUser = user;
             this.sessionToken = session.access_token;
             
-            // Store in localStorage for persistence
             localStorage.setItem('auth_token', session.access_token);
             localStorage.setItem('current_user', JSON.stringify(user));
             
@@ -117,8 +115,6 @@ export class AuthService {
         }
       }
       
-      // Fallback to demo mode with enhanced API
-      const { enhancedApi } = await import('./enhancedApi');
       const users = await enhancedApi.getUsers();
       const existingUser = users.find(u => u.email === registerData.email);
       
@@ -142,32 +138,29 @@ export class AuthService {
       };
 
       const createdUser = await enhancedApi.createUser(newUser);
-      
-      // Generate session token
       const token = btoa(JSON.stringify({ uid: createdUser.uid, timestamp: Date.now() }));
       
       this.currentUser = createdUser;
       this.sessionToken = token;
       
-      // Store in localStorage for persistence
       localStorage.setItem('auth_token', token);
       localStorage.setItem('current_user', JSON.stringify(createdUser));
 
       return { user: createdUser, token };
-    } catch (error) {
+    } catch (error: any) {
       throw new Error(`Registration failed: ${error.message}`);
     }
   }
 
   static async logout(): Promise<void> {
     try {
-      // Try to sign out from Supabase if available
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const metaEnv = this.getEnv();
+      const supabaseUrl = metaEnv.VITE_SUPABASE_URL;
+      const supabaseKey = metaEnv.VITE_SUPABASE_ANON_KEY;
       
       if (supabaseUrl && supabaseKey && supabaseUrl !== 'your_supabase_project_url' && supabaseKey !== 'your_supabase_anon_key') {
         try {
-          await supabaseService.signOut();
+          await (supabaseService as any).signOut?.();
         } catch (error) {
           console.warn('Supabase signout error:', error);
         }
@@ -175,7 +168,6 @@ export class AuthService {
     } catch (error) {
       console.warn('Logout error:', error);
     } finally {
-      // Always clear local session data
       this.currentUser = null;
       this.sessionToken = null;
       localStorage.removeItem('auth_token');
@@ -195,13 +187,11 @@ export class AuthService {
       const user = JSON.parse(userData);
       const tokenData = JSON.parse(atob(token));
       
-      // Check if token is not older than 24 hours
       if (Date.now() - tokenData.timestamp > 24 * 60 * 60 * 1000) {
         await this.logout();
         return null;
       }
 
-      // Verify user still exists and is active
       const currentUser = await enhancedApi.getUserById(user.uid);
       if (!currentUser || !currentUser.isActive) {
         await this.logout();
@@ -239,14 +229,11 @@ export class AuthService {
     const newPasswordHash = this.hashPassword(newPassword);
     await enhancedApi.updateUser(user.uid, { passwordHash: newPasswordHash });
     
-    // Update current user object
     this.currentUser = { ...user, passwordHash: newPasswordHash };
     localStorage.setItem('current_user', JSON.stringify(this.currentUser));
   }
 
   static async resetPassword(email: string): Promise<void> {
-    // In a real application, this would send a reset email
-    // For demo purposes, we'll just log it
     console.log(`Password reset requested for ${email}`);
     throw new Error('Password reset functionality would be implemented with email service');
   }

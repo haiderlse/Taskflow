@@ -12,7 +12,8 @@ import {
   SearchIcon, 
   XIcon, 
   ChevronRightIcon, 
-  StarIcon 
+  StarIcon,
+  TrashIcon
 } from './icons';
 
 interface PortfoliosPageProps {
@@ -146,6 +147,50 @@ export const PortfoliosPage: React.FC<PortfoliosPageProps> = ({
       setSelectedProjectIds([]);
     } catch (err) {
       console.error('Failed to create portfolio', err);
+    }
+  };
+
+  const handleDeletePortfolio = async (portfolioId: string) => {
+    if (confirm('Are you sure you want to delete this portfolio?')) {
+      try {
+        await enhancedApi.deletePortfolio(portfolioId);
+        setPortfolios(prev => prev.filter(p => p.id !== portfolioId));
+        if (selectedPortfolio?.id === portfolioId) {
+          setSelectedPortfolio(null);
+        }
+      } catch (err) {
+        console.error('Failed to delete portfolio', err);
+      }
+    }
+  };
+
+  const handleAddProjectToPortfolio = async (portfolioId: string, projectId: string) => {
+    const target = portfolios.find(p => p.id === portfolioId);
+    if (!target || target.projects.includes(projectId)) return;
+    const updatedProjects = [...target.projects, projectId];
+    try {
+      await enhancedApi.updatePortfolio(portfolioId, { projects: updatedProjects });
+      setPortfolios(prev => prev.map(p => p.id === portfolioId ? { ...p, projects: updatedProjects } : p));
+      if (selectedPortfolio?.id === portfolioId) {
+        setSelectedPortfolio({ ...selectedPortfolio, projects: updatedProjects });
+      }
+    } catch (err) {
+      console.error('Failed to add project to portfolio', err);
+    }
+  };
+
+  const handleRemoveProjectFromPortfolio = async (portfolioId: string, projectId: string) => {
+    const target = portfolios.find(p => p.id === portfolioId);
+    if (!target) return;
+    const updatedProjects = target.projects.filter(id => id !== projectId);
+    try {
+      await enhancedApi.updatePortfolio(portfolioId, { projects: updatedProjects });
+      setPortfolios(prev => prev.map(p => p.id === portfolioId ? { ...p, projects: updatedProjects } : p));
+      if (selectedPortfolio?.id === portfolioId) {
+        setSelectedPortfolio({ ...selectedPortfolio, projects: updatedProjects });
+      }
+    } catch (err) {
+      console.error('Failed to remove project from portfolio', err);
     }
   };
 
@@ -374,6 +419,192 @@ export const PortfoliosPage: React.FC<PortfoliosPageProps> = ({
           </div>
         </div>
       )}
+
+      {/* Selected Portfolio Detail Modal */}
+      {selectedPortfolio && (() => {
+        const stats = portfolioStats.find(s => s.portfolio.id === selectedPortfolio.id);
+        const attachedProjects = (selectedPortfolio.projects || []).map(id => projectsMap.get(id)).filter(Boolean) as Project[];
+        const availableToAdd = projects.filter(p => !selectedPortfolio.projects.includes(p.id));
+        const owner = usersMap.get(selectedPortfolio.ownerId);
+
+        return (
+          <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl max-w-2xl w-full shadow-2xl border border-gray-200 overflow-hidden flex flex-col max-h-[90vh]">
+              {/* Header */}
+              <div className="px-6 py-4 border-b border-gray-200 flex items-start justify-between bg-slate-50">
+                <div className="space-y-1">
+                  <div className="flex items-center space-x-2">
+                    <span className="p-1.5 bg-blue-100 text-blue-700 rounded-lg">
+                      <PortfolioIcon className="w-4 h-4" />
+                    </span>
+                    <h2 className="text-base font-bold text-gray-900">{selectedPortfolio.name}</h2>
+                    {stats && (
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                        stats.health === 'On Track' ? 'bg-emerald-100 text-emerald-800' :
+                        stats.health === 'At Risk' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'
+                      }`}>
+                        {stats.health}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 max-w-lg">
+                    {selectedPortfolio.description || 'No description provided for this portfolio.'}
+                  </p>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => handleDeletePortfolio(selectedPortfolio.id)}
+                    className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                    title="Delete Portfolio"
+                  >
+                    <TrashIcon className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setSelectedPortfolio(null)}
+                    className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
+                  >
+                    <XIcon className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Body */}
+              <div className="p-6 overflow-y-auto space-y-6 flex-1">
+                {/* Stats Summary Bar */}
+                {stats && (
+                  <div className="grid grid-cols-3 gap-3 p-4 bg-slate-50 rounded-xl border border-gray-100 text-center">
+                    <div>
+                      <div className="text-xl font-black text-gray-900">{stats.projectCount}</div>
+                      <div className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider">Projects</div>
+                    </div>
+                    <div>
+                      <div className="text-xl font-black text-blue-600">{stats.completedTasks}/{stats.totalTasks}</div>
+                      <div className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider">Tasks Done</div>
+                    </div>
+                    <div>
+                      <div className="text-xl font-black text-emerald-600">{stats.progressPct}%</div>
+                      <div className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider">Completion</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Progress Bar */}
+                {stats && (
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-xs text-gray-600 font-medium">
+                      <span>Portfolio Milestone Velocity</span>
+                      <span className="font-bold">{stats.progressPct}%</span>
+                    </div>
+                    <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        style={{ width: `${stats.progressPct}%` }}
+                        className="h-full bg-blue-600 rounded-full transition-all duration-500"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Attached Projects */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">
+                      Attached Projects ({attachedProjects.length})
+                    </h3>
+
+                    {availableToAdd.length > 0 && (
+                      <div className="flex items-center space-x-1.5">
+                        <select
+                          id="add-project-to-portfolio-select"
+                          defaultValue=""
+                          onChange={(e) => {
+                            if (e.target.value) {
+                              handleAddProjectToPortfolio(selectedPortfolio.id, e.target.value);
+                              e.target.value = '';
+                            }
+                          }}
+                          className="text-xs px-2.5 py-1 bg-white border border-gray-300 rounded-lg text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        >
+                          <option value="" disabled>+ Add project to portfolio...</option>
+                          {availableToAdd.map(p => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+
+                  {attachedProjects.length === 0 ? (
+                    <div className="text-center py-6 border-2 border-dashed border-gray-200 rounded-xl text-xs text-gray-400">
+                      No projects currently linked to this portfolio.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {attachedProjects.map(proj => {
+                        const projTasks = allTasks.filter(t => t.projectId === proj.id);
+                        const done = projTasks.filter(t => t.status === 'Done').length;
+                        const pct = projTasks.length > 0 ? Math.round((done / projTasks.length) * 100) : 0;
+
+                        return (
+                          <div
+                            key={proj.id}
+                            className="flex items-center justify-between p-3 rounded-xl border border-gray-200 hover:border-blue-200 hover:bg-blue-50/20 transition-all bg-white"
+                          >
+                            <div className="flex items-center space-x-3 min-w-0">
+                              <span className={`w-3 h-3 rounded-full shrink-0 ${proj.color || 'bg-blue-500'}`} />
+                              <div className="min-w-0">
+                                <h4 className="text-xs font-bold text-gray-900 truncate">{proj.name}</h4>
+                                <span className="text-[10px] text-gray-500 font-medium">
+                                  {done}/{projTasks.length} tasks completed ({pct}%)
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center space-x-2 shrink-0">
+                              {onNavigateToProject && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedPortfolio(null);
+                                    onNavigateToProject(proj.id);
+                                  }}
+                                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold rounded-lg transition-colors flex items-center space-x-1"
+                                >
+                                  <span>Open</span>
+                                  <ChevronRightIcon className="w-3 h-3" />
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveProjectFromPortfolio(selectedPortfolio.id, proj.id)}
+                                className="p-1 text-gray-400 hover:text-red-500 rounded transition-colors"
+                                title="Remove from portfolio"
+                              >
+                                <XIcon className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 py-3 bg-gray-50 border-t border-gray-200 flex items-center justify-between text-xs text-gray-500">
+                <span>Managed by {owner?.displayName || 'Workspace Admin'}</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedPortfolio(null)}
+                  className="px-4 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold rounded-xl transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

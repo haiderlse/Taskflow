@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Task, Comment, User, ColumnId, SubtaskItem, Priority } from '../types';
+import { Task, Comment, User, ColumnId, SubtaskItem, Priority, TaskRecurrence, Project } from '../types';
 import { enhancedApi } from '../services/enhancedApi';
 import TimeTracking from './TimeTracking';
 import ApprovalModal from './ApprovalModal';
@@ -20,18 +20,22 @@ import {
   DiamondIcon,
   CheckIcon,
   TagIcon,
-  TrashIcon
+  TrashIcon,
+  BoltIcon
 } from './icons';
 import { TaskDependencyIndicators } from './VisualIndicators';
+import { createGoogleCalendarUrl, downloadIcsFile } from '../utils/asanaUtils';
 
 interface TaskModalProps {
   task: Task;
   users: User[];
   currentUser: User;
   allTasks?: Task[];
+  project?: Project;
   onClose: () => void;
   onUpdateTask: (taskId: string, updates: Partial<Task>) => void;
   onNavigateToTask?: (targetTask: Task) => void;
+  onDeleteTask?: (taskId: string) => void;
 }
 
 export const TaskModal: React.FC<TaskModalProps> = ({ 
@@ -39,52 +43,62 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   users, 
   currentUser, 
   allTasks = [], 
+  project,
   onClose, 
   onUpdateTask,
-  onNavigateToTask 
+  onNavigateToTask,
+  onDeleteTask
 }) => {
   const [title, setTitle] = useState(task.title);
-  const [description, setDescription] = useState(task.description);
-  const [assigneeId, setAssigneeId] = useState(task.assigneeId);
-  const [dueDate, setDueDate] = useState(task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '');
-  const [startDate, setStartDate] = useState(task.startDate ? new Date(task.startDate).toISOString().split('T')[0] : '');
+  const [description, setDescription] = useState(task.description || '');
   const [priority, setPriority] = useState<Priority>(task.priority || 'medium');
+  const [dueDate, setDueDate] = useState(task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '');
+  const [assigneeId, setAssigneeId] = useState(task.assigneeId);
   const [estimatedHours, setEstimatedHours] = useState(task.estimatedTime ? (task.estimatedTime / 60).toString() : '');
   const [isMilestone, setIsMilestone] = useState(!!task.isMilestone);
+  const [collaboratorIds, setCollaboratorIds] = useState<string[]>(task.collaboratorIds || []);
   const [tags, setTags] = useState<string[]>(task.tags || []);
   const [newTagInput, setNewTagInput] = useState('');
-  
-  // Subtasks State
-  const [subtasks, setSubtasks] = useState<SubtaskItem[]>(
-    task.subtaskItems || (task.subtasks || []).map((stId, i) => ({
-      id: stId || `subtask-${i}`,
-      title: typeof stId === 'string' && stId.length > 5 ? stId : `Subtask ${i + 1}`,
-      isCompleted: false
-    }))
-  );
+  const [customFields, setCustomFields] = useState<Record<string, any>>(task.customFields || {});
+
+  // Recurrence
+  const [hasRecurrence, setHasRecurrence] = useState(!!task.recurrence);
+  const [recurrenceFrequency, setRecurrenceFrequency] = useState<TaskRecurrence['frequency']>(task.recurrence?.frequency || 'weekly');
+  const [recurrenceInterval, setRecurrenceInterval] = useState<number>(task.recurrence?.interval || 1);
+  const [repeatFrom, setRepeatFrom] = useState<'due_date' | 'completion_date'>(task.recurrence?.repeatFrom || 'due_date');
+
+  // Subtasks
+  const [subtasks, setSubtasks] = useState<SubtaskItem[]>(task.subtaskItems || []);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
 
+  // UI state
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
+  const [activeTab, setActiveTab] = useState<'details' | 'custom_fields' | 'subtasks' | 'dependencies' | 'time' | 'comments' | 'approvals' | 'activity'>('details');
   const [isCommenting, setIsCommenting] = useState(false);
-  const [activeTab, setActiveTab] = useState<'details' | 'subtasks' | 'dependencies' | 'time' | 'comments' | 'approvals'>('details');
   const [showApprovalModal, setShowApprovalModal] = useState(false);
 
-  // State for adding dependencies
+  // Dependency selection state
   const [selectedBlockerId, setSelectedBlockerId] = useState('');
   const [selectedDependentId, setSelectedDependentId] = useState('');
 
-  // Keep local state in sync when task prop changes
   useEffect(() => {
     setTitle(task.title);
-    setDescription(task.description);
-    setAssigneeId(task.assigneeId);
-    setDueDate(task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '');
-    setStartDate(task.startDate ? new Date(task.startDate).toISOString().split('T')[0] : '');
+    setDescription(task.description || '');
     setPriority(task.priority || 'medium');
+    setDueDate(task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '');
+    setAssigneeId(task.assigneeId);
     setEstimatedHours(task.estimatedTime ? (task.estimatedTime / 60).toString() : '');
     setIsMilestone(!!task.isMilestone);
+    setCollaboratorIds(task.collaboratorIds || []);
     setTags(task.tags || []);
+    setCustomFields(task.customFields || {});
+    setHasRecurrence(!!task.recurrence);
+    if (task.recurrence) {
+      setRecurrenceFrequency(task.recurrence.frequency);
+      setRecurrenceInterval(task.recurrence.interval || 1);
+      setRepeatFrom(task.recurrence.repeatFrom || 'due_date');
+    }
     if (task.subtaskItems) {
       setSubtasks(task.subtaskItems);
     }
@@ -100,10 +114,74 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     onUpdateTask(task.id, updates);
   };
 
+  const isCompleted = task.status === 'Done';
+
+  const handleToggleComplete = () => {
+    const nextStatus: ColumnId = isCompleted ? 'In Progress' : 'Done';
+    handleUpdate({
+      status: nextStatus,
+      completedDate: nextStatus === 'Done' ? new Date() : undefined
+    });
+  };
+
+  const handleDeleteTask = () => {
+    if (window.confirm(`Are you sure you want to delete "${task.title}"?`)) {
+      if (onDeleteTask) {
+        onDeleteTask(task.id);
+      } else {
+        enhancedApi.deleteTask(task.id);
+      }
+      onClose();
+    }
+  };
+
   const handleToggleMilestone = () => {
     const newVal = !isMilestone;
     setIsMilestone(newVal);
     handleUpdate({ isMilestone: newVal });
+  };
+
+  const handleRecurrenceChange = (enable: boolean) => {
+    setHasRecurrence(enable);
+    if (enable) {
+      const rec: TaskRecurrence = {
+        frequency: recurrenceFrequency,
+        interval: recurrenceInterval,
+        repeatFrom: repeatFrom
+      };
+      handleUpdate({ recurrence: rec });
+    } else {
+      handleUpdate({ recurrence: undefined });
+    }
+  };
+
+  const handleRecurrenceDetailChange = (freq: TaskRecurrence['frequency'], interval: number, from: 'due_date' | 'completion_date') => {
+    setRecurrenceFrequency(freq);
+    setRecurrenceInterval(interval);
+    setRepeatFrom(from);
+    if (hasRecurrence) {
+      handleUpdate({
+        recurrence: {
+          frequency: freq,
+          interval,
+          repeatFrom: from
+        }
+      });
+    }
+  };
+
+  const handleToggleCollaborator = (userId: string) => {
+    const next = collaboratorIds.includes(userId)
+      ? collaboratorIds.filter(id => id !== userId)
+      : [...collaboratorIds, userId];
+    setCollaboratorIds(next);
+    handleUpdate({ collaboratorIds: next });
+  };
+
+  const handleCustomFieldChange = (fieldId: string, value: any) => {
+    const nextFields = { ...customFields, [fieldId]: value };
+    setCustomFields(nextFields);
+    handleUpdate({ customFields: nextFields });
   };
 
   const handleAddTag = (e: React.KeyboardEvent | React.MouseEvent) => {
@@ -229,17 +307,32 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   };
 
   const totalDependenciesCount = currentBlockerIds.length + currentDependentIds.length;
+  const projectCustomFields = project?.customFields || [];
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex justify-center items-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col relative border border-gray-200 dark:border-slate-800 overflow-hidden text-gray-900 dark:text-slate-100" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col relative border border-gray-200 dark:border-slate-800 overflow-hidden text-gray-900 dark:text-slate-100" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="p-6 border-b border-gray-200 dark:border-slate-800 bg-gray-50/70 dark:bg-slate-900/60">
-          <div className="flex items-center justify-between pr-8 mb-2">
-            <div className="flex items-center space-x-2">
+          <div className="flex flex-wrap items-center justify-between pr-8 mb-3 gap-2">
+            <div className="flex flex-wrap items-center space-x-2">
+              {/* Asana Mark Complete Toggle Button */}
+              <button
+                onClick={handleToggleComplete}
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all border shadow-2xs ${
+                  isCompleted
+                    ? 'bg-emerald-600 border-emerald-600 text-white hover:bg-emerald-700'
+                    : 'bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-200 border-gray-300 dark:border-slate-700 hover:border-emerald-500 hover:text-emerald-600 dark:hover:text-emerald-400'
+                }`}
+                title={isCompleted ? "Mark as Incomplete" : "Mark as Complete"}
+              >
+                <CheckIcon className={`w-3.5 h-3.5 ${isCompleted ? 'stroke-[3]' : 'text-gray-400'}`} />
+                <span>{isCompleted ? 'Completed' : 'Mark Complete'}</span>
+              </button>
+
               <button
                 onClick={handleToggleMilestone}
-                className={`flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-bold transition-all border ${
+                className={`flex items-center space-x-1 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all border ${
                   isMilestone
                     ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border-emerald-400 dark:border-emerald-700 shadow-xs'
                     : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-slate-400 border-gray-300 dark:border-slate-700 hover:bg-gray-100'
@@ -250,13 +343,49 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 <span>{isMilestone ? 'Milestone' : 'Convert to Milestone'}</span>
               </button>
 
-              <span className={`px-2 py-0.5 rounded text-xs font-bold ${
+              <span className={`px-2.5 py-1 rounded-xl text-xs font-bold ${
                 task.status === 'Done' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300' :
                 task.status === 'In Progress' ? 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300' :
                 'bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300'
               }`}>
                 {task.status}
               </span>
+
+              {hasRecurrence && (
+                <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-xs font-bold bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                  <span>🔄</span>
+                  <span>Repeats {recurrenceFrequency}</span>
+                </span>
+              )}
+            </div>
+
+            {/* Actions: Calendar export and Delete */}
+            <div className="flex items-center space-x-1.5">
+              <a
+                href={createGoogleCalendarUrl(task)}
+                target="_blank"
+                rel="noreferrer"
+                className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-300 hover:bg-gray-50 flex items-center space-x-1"
+                title="Add to Google Calendar"
+              >
+                <span>📅</span>
+                <span>Google Cal</span>
+              </a>
+              <button
+                onClick={() => downloadIcsFile(task)}
+                className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-300 hover:bg-gray-50 flex items-center space-x-1"
+                title="Download iCal file for Outlook / Apple Calendar"
+              >
+                <span>📥</span>
+                <span>.ICS</span>
+              </button>
+              <button
+                onClick={handleDeleteTask}
+                className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors border border-transparent hover:border-red-200 dark:hover:border-red-900"
+                title="Delete this task"
+              >
+                <TrashIcon className="w-4 h-4" />
+              </button>
             </div>
           </div>
 
@@ -270,16 +399,25 @@ export const TaskModal: React.FC<TaskModalProps> = ({
           />
           
           {/* Tabs */}
-          <div className="flex space-x-4 mt-4 border-b border-gray-200 dark:border-slate-800 text-xs font-bold">
+          <div className="flex space-x-4 mt-4 border-b border-gray-200 dark:border-slate-800 text-xs font-bold overflow-x-auto">
             <button
               onClick={() => setActiveTab('details')}
-              className={`pb-2.5 border-b-2 transition-colors ${activeTab === 'details' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white'}`}
+              className={`pb-2.5 border-b-2 whitespace-nowrap transition-colors ${activeTab === 'details' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white'}`}
             >
               Details
             </button>
             <button
+              onClick={() => setActiveTab('custom_fields')}
+              className={`pb-2.5 border-b-2 whitespace-nowrap flex items-center space-x-1 transition-colors ${activeTab === 'custom_fields' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white'}`}
+            >
+              <span>Custom Fields</span>
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 font-mono">
+                {projectCustomFields.length}
+              </span>
+            </button>
+            <button
               onClick={() => setActiveTab('subtasks')}
-              className={`pb-2.5 border-b-2 flex items-center space-x-1.5 transition-colors ${activeTab === 'subtasks' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white'}`}
+              className={`pb-2.5 border-b-2 whitespace-nowrap flex items-center space-x-1.5 transition-colors ${activeTab === 'subtasks' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white'}`}
             >
               <span>Subtasks</span>
               {subtasks.length > 0 && (
@@ -290,7 +428,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             </button>
             <button
               onClick={() => setActiveTab('dependencies')}
-              className={`pb-2.5 border-b-2 flex items-center space-x-1.5 transition-colors ${activeTab === 'dependencies' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white'}`}
+              className={`pb-2.5 border-b-2 whitespace-nowrap flex items-center space-x-1.5 transition-colors ${activeTab === 'dependencies' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white'}`}
             >
               <span>Dependencies</span>
               {totalDependenciesCount > 0 && (
@@ -303,29 +441,27 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             </button>
             <button
               onClick={() => setActiveTab('time')}
-              className={`pb-2.5 border-b-2 transition-colors ${activeTab === 'time' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white'}`}
+              className={`pb-2.5 border-b-2 whitespace-nowrap transition-colors ${activeTab === 'time' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white'}`}
             >
               Time Tracking
             </button>
             <button
               onClick={() => setActiveTab('comments')}
-              className={`pb-2.5 border-b-2 transition-colors ${activeTab === 'comments' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white'}`}
+              className={`pb-2.5 border-b-2 whitespace-nowrap transition-colors ${activeTab === 'comments' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white'}`}
             >
               Comments ({comments.length})
             </button>
             <button
               onClick={() => setActiveTab('approvals')}
-              className={`pb-2.5 border-b-2 transition-colors ${activeTab === 'approvals' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white'}`}
+              className={`pb-2.5 border-b-2 whitespace-nowrap transition-colors ${activeTab === 'approvals' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white'}`}
             >
-              Approvals {task.approval && (
-                <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] ${
-                  task.approval.status === 'approved' ? 'bg-emerald-100 text-emerald-800' :
-                  task.approval.status === 'rejected' ? 'bg-red-100 text-red-800' :
-                  'bg-yellow-100 text-yellow-800'
-                }`}>
-                  {task.approval.status}
-                </span>
-              )}
+              Approvals
+            </button>
+            <button
+              onClick={() => setActiveTab('activity')}
+              className={`pb-2.5 border-b-2 whitespace-nowrap transition-colors ${activeTab === 'activity' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white'}`}
+            >
+              Activity Log
             </button>
           </div>
         </div>
@@ -336,7 +472,33 @@ export const TaskModal: React.FC<TaskModalProps> = ({
           {activeTab === 'details' && (
             <div className="space-y-6">
               {/* Task Details Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+                {/* Stage / Status */}
+                <div className="flex items-center space-x-2.5 p-3 bg-gray-50 dark:bg-slate-800/70 border border-gray-200 dark:border-slate-700 rounded-xl">
+                  <span className={`w-3 h-3 rounded-full shrink-0 ${
+                    task.status === 'Done' ? 'bg-emerald-500' :
+                    task.status === 'In Progress' ? 'bg-blue-500' : 'bg-slate-400'
+                  }`} />
+                  <div className="flex-grow min-w-0">
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-400">Stage</label>
+                    <select
+                      value={task.status}
+                      onChange={(e) => {
+                        const newStatus = e.target.value as ColumnId;
+                        handleUpdate({ 
+                          status: newStatus,
+                          completedDate: newStatus === 'Done' ? new Date() : undefined
+                        });
+                      }}
+                      className="w-full bg-transparent text-xs font-bold text-gray-900 dark:text-white focus:outline-none cursor-pointer"
+                    >
+                      <option value="To Do" className="text-gray-900 dark:text-white bg-white dark:bg-slate-800">To Do</option>
+                      <option value="In Progress" className="text-gray-900 dark:text-white bg-white dark:bg-slate-800">In Progress</option>
+                      <option value="Done" className="text-gray-900 dark:text-white bg-white dark:bg-slate-800">Done</option>
+                    </select>
+                  </div>
+                </div>
+
                 {/* Assignee */}
                 <div className="flex items-center space-x-2.5 p-3 bg-gray-50 dark:bg-slate-800/70 border border-gray-200 dark:border-slate-700 rounded-xl">
                   <UserIcon className="w-4 h-4 text-gray-400 shrink-0" />
@@ -424,6 +586,91 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 </div>
               </div>
 
+              {/* Recurrence Configuration Section */}
+              <div className="p-4 bg-purple-50/50 dark:bg-purple-950/20 rounded-xl border border-purple-200/70 dark:border-purple-900/50 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={hasRecurrence}
+                      onChange={(e) => handleRecurrenceChange(e.target.checked)}
+                      className="rounded border-purple-400 text-purple-600 focus:ring-purple-500"
+                    />
+                    <span className="font-bold text-xs text-purple-900 dark:text-purple-300">
+                      🔄 Set Recurring Task (Auto-creates next instance on completion)
+                    </span>
+                  </label>
+                </div>
+
+                {hasRecurrence && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-xs">
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Frequency</label>
+                      <select
+                        value={recurrenceFrequency}
+                        onChange={(e) => handleRecurrenceDetailChange(e.target.value as any, recurrenceInterval, repeatFrom)}
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-purple-200 dark:border-purple-800 bg-white dark:bg-slate-900 font-semibold"
+                      >
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                        <option value="yearly">Yearly</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Repeat Every</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="30"
+                        value={recurrenceInterval}
+                        onChange={(e) => handleRecurrenceDetailChange(recurrenceFrequency, parseInt(e.target.value) || 1, repeatFrom)}
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-purple-200 dark:border-purple-800 bg-white dark:bg-slate-900 font-semibold"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Compute Next Due Date From</label>
+                      <select
+                        value={repeatFrom}
+                        onChange={(e) => handleRecurrenceDetailChange(recurrenceFrequency, recurrenceInterval, e.target.value as any)}
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-purple-200 dark:border-purple-800 bg-white dark:bg-slate-900 font-semibold"
+                      >
+                        <option value="due_date">Scheduled Due Date</option>
+                        <option value="completion_date">Actual Completion Date</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Collaborators Section */}
+              <div className="p-4 bg-gray-50/60 dark:bg-slate-800/50 rounded-xl border border-gray-200 dark:border-slate-700">
+                <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-2">
+                  👥 Collaborators & Followers ({collaboratorIds.length})
+                </label>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {users.map(u => {
+                    const isFollower = collaboratorIds.includes(u.uid);
+                    return (
+                      <button
+                        key={u.uid}
+                        type="button"
+                        onClick={() => handleToggleCollaborator(u.uid)}
+                        className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-all ${
+                          isFollower
+                            ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                            : 'bg-white dark:bg-slate-900 text-gray-600 dark:text-slate-400 border-gray-300 dark:border-slate-700 hover:bg-gray-100'
+                        }`}
+                      >
+                        {isFollower ? `✓ ${u.displayName}` : `+ ${u.displayName}`}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Tags Section */}
               <div className="p-4 bg-gray-50/60 dark:bg-slate-800/50 rounded-xl border border-gray-200 dark:border-slate-700">
                 <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-2 flex items-center space-x-1.5">
@@ -480,6 +727,125 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                   placeholder="Add a more detailed description, requirements, or links..."
                 />
               </div>
+            </div>
+          )}
+
+          {/* Custom Fields Tab */}
+          {activeTab === 'custom_fields' && (
+            <div className="space-y-4 text-xs">
+              <div className="flex items-center justify-between pb-2 border-b border-gray-200 dark:border-slate-800">
+                <h4 className="font-bold text-sm text-gray-900 dark:text-white">Project Custom Fields</h4>
+                <span className="text-gray-400">{projectCustomFields.length} configured fields</span>
+              </div>
+
+              {projectCustomFields.length === 0 ? (
+                <div className="text-center py-8 text-gray-400 space-y-2">
+                  <p>No custom fields configured for this project yet.</p>
+                  <p className="text-[11px]">Use the Custom Fields button on the project top bar to add dropdowns, currencies, numbers, and tags.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {projectCustomFields.map(field => {
+                    const val = customFields[field.id];
+
+                    return (
+                      <div key={field.id} className="p-3 bg-gray-50 dark:bg-slate-800/60 rounded-xl border border-gray-200 dark:border-slate-700 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <label className="font-bold text-gray-800 dark:text-slate-200">
+                            {field.name} {field.isRequired && <span className="text-red-500">*</span>}
+                          </label>
+                          <span className="text-[10px] text-gray-400 font-mono">({field.type})</span>
+                        </div>
+
+                        {field.type === 'dropdown' && (
+                          <select
+                            value={val || ''}
+                            onChange={e => handleCustomFieldChange(field.id, e.target.value)}
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-gray-900 dark:text-white font-semibold"
+                          >
+                            <option value="">-- None --</option>
+                            {(field.options || []).map(opt => (
+                              <option key={opt} value={opt}>{opt}</option>
+                            ))}
+                          </select>
+                        )}
+
+                        {field.type === 'currency' && (
+                          <div className="flex items-center space-x-1">
+                            <span className="px-2 py-1.5 bg-gray-200 dark:bg-slate-700 rounded-l-lg font-bold text-gray-600 dark:text-slate-300">
+                              {field.currencyCode || '$'}
+                            </span>
+                            <input
+                              type="number"
+                              value={val ?? ''}
+                              onChange={e => handleCustomFieldChange(field.id, parseFloat(e.target.value) || 0)}
+                              placeholder="0.00"
+                              className="flex-1 px-2.5 py-1.5 rounded-r-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-gray-900 dark:text-white font-semibold"
+                            />
+                          </div>
+                        )}
+
+                        {field.type === 'number' && (
+                          <input
+                            type="number"
+                            value={val ?? ''}
+                            onChange={e => handleCustomFieldChange(field.id, parseFloat(e.target.value) || 0)}
+                            placeholder="0"
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-gray-900 dark:text-white font-semibold"
+                          />
+                        )}
+
+                        {field.type === 'percentage' && (
+                          <div className="flex items-center space-x-2">
+                            <input
+                              type="range"
+                              min="0"
+                              max="100"
+                              value={val ?? 0}
+                              onChange={e => handleCustomFieldChange(field.id, parseInt(e.target.value) || 0)}
+                              className="flex-1"
+                            />
+                            <span className="w-10 font-mono font-bold text-blue-600 dark:text-blue-400">
+                              {val ?? 0}%
+                            </span>
+                          </div>
+                        )}
+
+                        {field.type === 'text' && (
+                          <input
+                            type="text"
+                            value={val || ''}
+                            onChange={e => handleCustomFieldChange(field.id, e.target.value)}
+                            placeholder="Text note..."
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                          />
+                        )}
+
+                        {field.type === 'date' && (
+                          <input
+                            type="date"
+                            value={val || ''}
+                            onChange={e => handleCustomFieldChange(field.id, e.target.value)}
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                          />
+                        )}
+
+                        {field.type === 'checkbox' && (
+                          <label className="flex items-center space-x-2 pt-1 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={!!val}
+                              onChange={e => handleCustomFieldChange(field.id, e.target.checked)}
+                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span className="font-semibold text-gray-700 dark:text-slate-300">Confirmed / Checked</span>
+                          </label>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
@@ -778,6 +1144,39 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                   >
                     Request Approval
                   </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Activity Log Tab */}
+          {activeTab === 'activity' && (
+            <div className="space-y-3 text-xs">
+              <div className="flex items-center justify-between pb-2 border-b border-gray-200 dark:border-slate-800">
+                <h4 className="font-bold text-sm text-gray-900 dark:text-white">Task History & Audit Log</h4>
+                <span className="text-gray-400">{(task.activities || []).length} events</span>
+              </div>
+
+              {(task.activities || []).length > 0 ? (
+                <div className="space-y-2">
+                  {(task.activities || []).map(act => (
+                    <div key={act.id} className="p-3 bg-gray-50 dark:bg-slate-800/60 rounded-xl border border-gray-200 dark:border-slate-700 flex items-start space-x-3">
+                      <div className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">
+                        ⚡
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-semibold text-gray-900 dark:text-white">{act.details}</p>
+                        <p className="text-[10px] text-gray-400 mt-0.5">
+                          {act.userDisplayName || 'System'} • {new Date(act.timestamp).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-6 bg-gray-50 dark:bg-slate-800/50 rounded-xl border border-gray-200 dark:border-slate-700 text-center text-gray-400 space-y-1">
+                  <p className="font-bold">Created on {new Date(task.createdAt).toLocaleDateString()}</p>
+                  <p className="text-[11px]">Subsequent updates and state transitions are recorded here.</p>
                 </div>
               )}
             </div>

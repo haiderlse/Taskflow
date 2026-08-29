@@ -170,7 +170,7 @@ const CorporateReportingPage: React.FC<CorporateReportingPageProps> = ({ current
                   <div className="w-20 bg-gray-200 rounded-full h-2">
                     <div 
                       className="bg-blue-500 h-2 rounded-full" 
-                      style={{ width: `${(count / Math.max(...Object.values(metrics.approvalsByDepartment))) * 100}%` }}
+                      style={{ width: `${((count as number) / Math.max(...(Object.values(metrics.approvalsByDepartment) as number[]), 1)) * 100}%` }}
                     ></div>
                   </div>
                   <span className="text-sm font-medium w-8">{count}</span>

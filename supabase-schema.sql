@@ -53,8 +53,11 @@ CREATE TABLE tasks (
     assignee_id UUID REFERENCES users(uid),
     created_by UUID NOT NULL REFERENCES users(uid),
     due_date TIMESTAMP WITH TIME ZONE,
+    due_time VARCHAR(5), -- 'HH:mm' local time-of-day for the deadline; NULL means date-only
     start_date TIMESTAMP WITH TIME ZONE,
     completed_date TIMESTAMP WITH TIME ZONE,
+    scheduled_start TIMESTAMP WITH TIME ZONE, -- planner time block
+    scheduled_end TIMESTAMP WITH TIME ZONE,
     priority VARCHAR(50) DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'critical')),
     "order" INTEGER DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -134,6 +137,31 @@ CREATE TABLE goals (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Calendar events table (meetings, focus blocks, reminders)
+CREATE TABLE calendar_events (
+    id VARCHAR(255) PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    description TEXT DEFAULT '',
+    type VARCHAR(50) DEFAULT 'meeting' CHECK (type IN ('meeting', 'focus', 'reminder', 'deadline', 'out_of_office', 'personal')),
+    owner_id UUID NOT NULL REFERENCES users(uid) ON DELETE CASCADE,
+    start_time TIMESTAMP WITH TIME ZONE NOT NULL,
+    end_time TIMESTAMP WITH TIME ZONE NOT NULL,
+    is_all_day BOOLEAN DEFAULT FALSE,
+    location VARCHAR(255),
+    conference_link TEXT,
+    attendees JSONB DEFAULT '[]',       -- [{ userId, email, name, response }]
+    project_id VARCHAR(255) REFERENCES projects(id) ON DELETE SET NULL,
+    task_ids TEXT[] DEFAULT '{}',
+    color VARCHAR(50),
+    reminders JSONB DEFAULT '[]',       -- [{ id, minutesBefore, channels }]
+    recurrence JSONB,                   -- { frequency, interval, daysOfWeek, until, count }
+    exceptions TEXT[] DEFAULT '{}',     -- yyyy-mm-dd occurrences removed from the series
+    status VARCHAR(50) DEFAULT 'confirmed' CHECK (status IN ('confirmed', 'tentative', 'cancelled')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT calendar_events_time_order CHECK (end_time > start_time)
+);
+
 -- Create indexes for better performance
 CREATE INDEX idx_tasks_project_id ON tasks(project_id);
 CREATE INDEX idx_tasks_assignee_id ON tasks(assignee_id);
@@ -144,6 +172,9 @@ CREATE INDEX idx_comments_task_id ON comments(task_id);
 CREATE INDEX idx_time_entries_task_id ON time_entries(task_id);
 CREATE INDEX idx_time_entries_user_id ON time_entries(user_id);
 CREATE INDEX idx_milestones_project_id ON milestones(project_id);
+CREATE INDEX idx_tasks_scheduled_start ON tasks(scheduled_start);
+CREATE INDEX idx_calendar_events_owner_id ON calendar_events(owner_id);
+CREATE INDEX idx_calendar_events_start_time ON calendar_events(start_time);
 
 -- Enable Row Level Security (RLS)
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
@@ -154,6 +185,7 @@ ALTER TABLE time_entries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE milestones ENABLE ROW LEVEL SECURITY;
 ALTER TABLE portfolios ENABLE ROW LEVEL SECURITY;
 ALTER TABLE goals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE calendar_events ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies
 
@@ -231,6 +263,17 @@ CREATE POLICY "Users can view their own time entries" ON time_entries FOR SELECT
 CREATE POLICY "Users can create their own time entries" ON time_entries FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Users can update their own time entries" ON time_entries FOR UPDATE TO authenticated USING (auth.uid() = user_id);
 
+-- Calendar events policies
+-- An event is visible to its owner and to anyone listed in the attendees JSON;
+-- only the owner can create, change or delete it.
+CREATE POLICY "Users can view their own or invited events" ON calendar_events FOR SELECT TO authenticated USING (
+    auth.uid() = owner_id
+    OR attendees @> jsonb_build_array(jsonb_build_object('userId', auth.uid()::text))
+);
+CREATE POLICY "Users can create their own events" ON calendar_events FOR INSERT TO authenticated WITH CHECK (auth.uid() = owner_id);
+CREATE POLICY "Users can update their own events" ON calendar_events FOR UPDATE TO authenticated USING (auth.uid() = owner_id);
+CREATE POLICY "Users can delete their own events" ON calendar_events FOR DELETE TO authenticated USING (auth.uid() = owner_id);
+
 -- Functions for updating timestamps
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
@@ -242,6 +285,7 @@ $$ language 'plpgsql';
 
 -- Triggers for automatic timestamp updates
 CREATE TRIGGER update_projects_updated_at BEFORE UPDATE ON projects FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_calendar_events_updated_at BEFORE UPDATE ON calendar_events FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_tasks_updated_at BEFORE UPDATE ON tasks FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_comments_updated_at BEFORE UPDATE ON comments FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_portfolios_updated_at BEFORE UPDATE ON portfolios FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

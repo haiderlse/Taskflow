@@ -14,6 +14,7 @@ import PortfoliosPage from './components/PortfoliosPage';
 import GoalsPage from './components/GoalsPage';
 import TeamPage from './components/OrganizationManagement';
 import ApprovalsPage from './components/ApprovalsPage';
+import PlannerPage from './components/PlannerPage';
 import CreateModal from './components/CreateModal';
 import TaskSearchModal from './components/TaskSearchModal';
 import InviteModal from './components/InviteModal';
@@ -21,6 +22,7 @@ import UpgradeModal from './components/UpgradeModal';
 import TaskModal from './components/TaskModal';
 import TimesheetsModal from './components/TimesheetsModal';
 import { notificationService } from './services/notificationService';
+import { reminderService } from './services/reminderService';
 import { 
   MenuIcon, 
   PlusIcon, 
@@ -36,11 +38,12 @@ import {
   SearchIcon,
   StarIcon,
   ClockIcon,
+  CalendarIcon,
   AsanaLogo
 } from './components/icons';
 
 // --- Types --- //
-type ViewType = 'home' | 'my-tasks' | 'inbox' | 'reporting' | 'portfolios' | 'goals' | 'team' | 'project' | 'approvals';
+type ViewType = 'home' | 'my-tasks' | 'planner' | 'inbox' | 'reporting' | 'portfolios' | 'goals' | 'team' | 'project' | 'approvals';
 interface ViewState {
   type: ViewType;
   id?: string; // for project id
@@ -150,6 +153,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       <div className="flex-grow overflow-y-auto pr-1 space-y-0.5">
         <NavItem icon={<HomeIcon className="w-4 h-4" />} label="Home Dashboard" selected={currentView.type === 'home'} onClick={() => onNavigate({ type: 'home'})} />
         <NavItem icon={<CheckCircleIcon className="w-4 h-4" />} label="My Tasks" selected={currentView.type === 'my-tasks'} onClick={() => onNavigate({ type: 'my-tasks'})} />
+        <NavItem icon={<CalendarIcon className="w-4 h-4" />} label="Planner & Calendar" selected={currentView.type === 'planner'} onClick={() => onNavigate({ type: 'planner'})} />
         <NavItem 
           icon={<InboxIcon className="w-4 h-4" />} 
           label="Activity Inbox" 
@@ -304,6 +308,19 @@ const App: React.FC = () => {
     }
   }, [allTasks, projects]);
 
+  // Meeting + deadline reminders run app-wide, not just while the Planner is open,
+  // and are re-synced periodically so a long-lived tab keeps scheduling ahead.
+  useEffect(() => {
+    if (!currentUser) return;
+    const myTasks = allTasks.filter(t => t.assigneeId === currentUser.uid);
+    reminderService.sync(currentUser.uid, myTasks);
+    const timer = setInterval(() => reminderService.sync(currentUser.uid, myTasks), 5 * 60 * 1000);
+    return () => {
+      clearInterval(timer);
+      reminderService.stop();
+    };
+  }, [currentUser, allTasks]);
+
   const handleLogin = (user: User) => {
     setAuthLoading(true);
     setTimeout(() => {
@@ -405,6 +422,20 @@ const App: React.FC = () => {
               users={users} 
               projects={projects}
               onNavigateToProject={(id) => setCurrentView({ type: 'project', id })}
+            />
+          );
+        case 'planner':
+          return (
+            <PlannerPage
+              currentUser={currentUser}
+              users={users}
+              projects={projects}
+              tasks={allTasks}
+              onTaskUpdate={async (taskId, updates) => {
+                await mockApi.updateTask(taskId, updates);
+                await loadData();
+              }}
+              onOpenTask={(t) => setModalTask(t)}
             />
           );
         case 'inbox': 

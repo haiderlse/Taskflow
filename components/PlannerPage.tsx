@@ -8,6 +8,7 @@ import {
   Task,
   User,
 } from '../types';
+import type { CalendarSyncState } from '../services/calendarService';
 import {
   EVENT_TYPE_LABELS,
   addDays,
@@ -316,6 +317,7 @@ const PlannerPage: React.FC<PlannerPageProps> = ({
   >({ mode: 'closed' });
   const [liveReminder, setLiveReminder] = useState<ScheduledReminder | null>(null);
   const [permission, setPermission] = useState(reminderService.getPermission());
+  const [sync, setSync] = useState<CalendarSyncState>(() => calendarService.getSyncState());
   const [showUnscheduled, setShowUnscheduled] = useState(true);
   const gridScrollRef = useRef<HTMLDivElement>(null);
 
@@ -327,6 +329,14 @@ const PlannerPage: React.FC<PlannerPageProps> = ({
   // --- Live data wiring --- //
 
   useEffect(() => calendarService.subscribe(setEvents), []);
+
+  // Points the calendar store at Supabase when the signed-in user can own rows
+  // there; it stays on local storage for demo logins or an unconfigured project.
+  useEffect(() => {
+    calendarService.connect(currentUser.uid);
+  }, [currentUser.uid]);
+
+  useEffect(() => calendarService.onSyncStateChange(setSync), []);
 
   // A one-minute tick keeps the "now" line, countdowns and urgency states honest.
   useEffect(() => {
@@ -766,6 +776,28 @@ const PlannerPage: React.FC<PlannerPageProps> = ({
           <span className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300">
             <CheckCircleIcon className="w-3.5 h-3.5" />
             <span>{dueTodayTasks.length} due today</span>
+          </span>
+
+          <span
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold ${
+              sync.error
+                ? 'bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300'
+                : sync.backend === 'supabase'
+                  ? 'bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+            }`}
+            title={
+              sync.error
+                ? `Calendar is saving locally only: ${sync.error}`
+                : sync.backend === 'supabase'
+                  ? 'Events sync to Supabase and across your devices'
+                  : 'Events are saved in this browser only. Configure Supabase to sync across devices.'
+            }
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${
+              sync.error ? 'bg-rose-500' : sync.backend === 'supabase' ? 'bg-emerald-500' : 'bg-slate-400'
+            }`} />
+            <span>{sync.backend === 'supabase' ? 'Synced' : 'This browser only'}</span>
           </span>
 
           {permission !== 'granted' && (

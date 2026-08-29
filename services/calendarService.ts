@@ -6,10 +6,31 @@ import {
   Task,
   ScheduleEntry,
 } from '../types';
+import { supabaseService } from './supabaseService';
 
 const EVENTS_STORAGE_KEY = 'taskflow_calendar_events';
 
 type CalendarListener = (events: CalendarEvent[]) => void;
+
+/** Where events are being read from and written to, for display in the UI. */
+export type CalendarBackend = 'local' | 'supabase';
+
+export interface CalendarSyncState {
+  backend: CalendarBackend;
+  /** Set when a remote write or the initial remote load failed. */
+  error: string | null;
+}
+
+type SyncListener = (state: CalendarSyncState) => void;
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * `calendar_events.owner_id` is a UUID referencing `users(uid)`, and the RLS
+ * policies compare it against `auth.uid()`. Demo users have ids like `user-1`,
+ * so they can never satisfy either constraint and must stay on local storage.
+ */
+const isRealAuthUser = (userId: string | null): boolean => !!userId && UUID_RE.test(userId);
 
 // --- Date helpers (exported: the planner UI needs the same maths) --- //
 
@@ -174,10 +195,108 @@ const seedEvents = (ownerId: string): CalendarEvent[] => {
   ];
 };
 
+/**
+ * Holds every event in memory so the planner can read synchronously while it
+ * renders, and mirrors that cache to whichever backend is active:
+ *
+ *  - `supabase` once `connect()` is called with a real Supabase Auth user, with
+ *    a realtime subscription keeping other devices in step.
+ *  - `local` otherwise (Supabase unconfigured, or a demo login whose id is not a
+ *    UUID and so can never satisfy the table's FK or its RLS policies).
+ *
+ * Writes apply to the cache first and persist afterwards, so the UI never waits
+ * on the network; a failed remote write rolls the cache back and rethrows.
+ */
 class CalendarService {
   private events: CalendarEvent[] = [];
   private listeners: Set<CalendarListener> = new Set();
+  private syncListeners: Set<SyncListener> = new Set();
   private loaded = false;
+  private backend: CalendarBackend = 'local';
+  private ownerId: string | null = null;
+  private error: string | null = null;
+  private unsubscribeRemote: (() => void) | null = null;
+  private connecting: Promise<void> | null = null;
+
+  // --- Backend selection --- //
+
+  /**
+   * Points the store at Supabase when the signed-in user can actually own rows
+   * there, otherwise leaves it on local storage. Idempotent per user.
+   */
+  connect(ownerId: string): Promise<void> {
+    if (this.ownerId === ownerId && this.connecting) return this.connecting;
+    if (this.ownerId === ownerId && this.backend === 'supabase') return Promise.resolve();
+
+    this.ownerId = ownerId;
+    this.connecting = this.doConnect(ownerId);
+    return this.connecting;
+  }
+
+  private async doConnect(ownerId: string): Promise<void> {
+    if (!supabaseService.available || !isRealAuthUser(ownerId)) {
+      this.setBackend('local', null);
+      this.load();
+      return;
+    }
+
+    try {
+      const remote = await supabaseService.getCalendarEvents();
+      this.events = remote;
+      this.loaded = true;
+      this.setBackend('supabase', null);
+      this.emit();
+
+      this.unsubscribeRemote?.();
+      this.unsubscribeRemote = supabaseService.subscribeToCalendarEvents(events => {
+        this.events = events;
+        this.emit();
+      });
+    } catch (err: any) {
+      // A misconfigured project or a missing table must not take the page down:
+      // fall back to local storage and surface why in the UI.
+      console.warn('Calendar: Supabase unavailable, using local storage.', err);
+      this.setBackend('local', err?.message || 'Could not reach Supabase');
+      this.load();
+    }
+  }
+
+  private setBackend(backend: CalendarBackend, error: string | null) {
+    this.backend = backend;
+    this.error = error;
+    const state = this.getSyncState();
+    this.syncListeners.forEach(l => l(state));
+  }
+
+  getSyncState(): CalendarSyncState {
+    return { backend: this.backend, error: this.error };
+  }
+
+  onSyncStateChange(listener: SyncListener): () => void {
+    this.syncListeners.add(listener);
+    listener(this.getSyncState());
+    return () => {
+      this.syncListeners.delete(listener);
+    };
+  }
+
+  /**
+   * Tears down on sign-out. The cache is dropped as well: it may hold another
+   * account's remote rows, which must not be visible to - or mirrored into local
+   * storage by - whoever signs in next.
+   */
+  disconnect() {
+    this.unsubscribeRemote?.();
+    this.unsubscribeRemote = null;
+    this.connecting = null;
+    this.ownerId = null;
+    this.events = [];
+    this.loaded = false;
+    this.setBackend('local', null);
+    this.emit();
+  }
+
+  // --- Local persistence --- //
 
   private load() {
     if (this.loaded) return;
@@ -193,11 +312,14 @@ class CalendarService {
     } catch {
       // Corrupt or unavailable storage: fall through to the seed set.
     }
-    this.events = seedEvents('user-1');
+    this.events = seedEvents(this.ownerId || 'user-1');
     this.persist();
   }
 
   private persist() {
+    // Supabase is the system of record when connected; skip the local mirror so
+    // a stale copy cannot resurrect deleted rows on the next local session.
+    if (this.backend === 'supabase') return;
     try {
       if (typeof window !== 'undefined') {
         window.localStorage.setItem(EVENTS_STORAGE_KEY, JSON.stringify(this.events));
@@ -211,6 +333,16 @@ class CalendarService {
     const snapshot = [...this.events];
     this.listeners.forEach(l => l(snapshot));
   }
+
+  /** Restores the cache and tells subscribers, after a remote write failed. */
+  private rollback(previous: CalendarEvent[], err: any): never {
+    this.events = previous;
+    this.emit();
+    this.setBackend(this.backend, err?.message || 'Calendar write failed');
+    throw err;
+  }
+
+  // --- Reads (synchronous, served from cache) --- //
 
   subscribe(listener: CalendarListener): () => void {
     this.load();
@@ -231,7 +363,11 @@ class CalendarService {
     return this.events.find(e => e.id === id);
   }
 
-  createEvent(input: Partial<CalendarEvent> & { title: string; start: Date; end: Date; ownerId: string }): CalendarEvent {
+  // --- Writes (optimistic, then persisted) --- //
+
+  async createEvent(
+    input: Partial<CalendarEvent> & { title: string; start: Date; end: Date; ownerId: string }
+  ): Promise<CalendarEvent> {
     this.load();
     const now = new Date();
     const type = input.type || 'meeting';
@@ -250,44 +386,82 @@ class CalendarService {
       createdAt: now,
       updatedAt: now,
     };
+
+    const previous = this.events;
     this.events = [...this.events, event];
-    this.persist();
     this.emit();
+
+    if (this.backend === 'supabase') {
+      try {
+        const saved = await supabaseService.createCalendarEvent(event);
+        this.events = this.events.map(e => (e.id === event.id ? saved : e));
+        this.emit();
+        return saved;
+      } catch (err) {
+        this.rollback(previous, err);
+      }
+    }
+
+    this.persist();
     return event;
   }
 
-  updateEvent(id: string, updates: Partial<CalendarEvent>): CalendarEvent | undefined {
+  async updateEvent(id: string, updates: Partial<CalendarEvent>): Promise<CalendarEvent | undefined> {
     this.load();
+    const previous = this.events;
     let updated: CalendarEvent | undefined;
+
     this.events = this.events.map(e => {
       if (e.id !== id) return e;
       updated = { ...e, ...updates, id: e.id, updatedAt: new Date() };
       return updated;
     });
-    if (updated) {
-      this.persist();
-      this.emit();
+    if (!updated) return undefined;
+    this.emit();
+
+    if (this.backend === 'supabase') {
+      try {
+        const saved = await supabaseService.updateCalendarEvent(id, updates);
+        this.events = this.events.map(e => (e.id === id ? saved : e));
+        this.emit();
+        return saved;
+      } catch (err) {
+        this.rollback(previous, err);
+      }
     }
+
+    this.persist();
     return updated;
   }
 
-  deleteEvent(id: string) {
+  async deleteEvent(id: string): Promise<void> {
     this.load();
+    const previous = this.events;
     this.events = this.events.filter(e => e.id !== id);
-    this.persist();
     this.emit();
+
+    if (this.backend === 'supabase') {
+      try {
+        await supabaseService.deleteCalendarEvent(id);
+        return;
+      } catch (err) {
+        this.rollback(previous, err);
+      }
+    }
+
+    this.persist();
   }
 
   /** Removes a single occurrence of a recurring series, keeping the rest intact. */
-  deleteOccurrence(eventId: string, occurrenceStart: Date) {
+  async deleteOccurrence(eventId: string, occurrenceStart: Date): Promise<void> {
     const event = this.getEventById(eventId);
     if (!event) return;
     if (!event.recurrence) {
-      this.deleteEvent(eventId);
+      await this.deleteEvent(eventId);
       return;
     }
     const exceptions = [...(event.exceptions || []), dateKey(occurrenceStart)];
-    this.updateEvent(eventId, { exceptions });
+    await this.updateEvent(eventId, { exceptions });
   }
 
   /**
@@ -407,8 +581,12 @@ class CalendarService {
     return upcoming[0] || null;
   }
 
-  /** Clears stored events and reseeds. Exposed for the "reset demo data" action. */
+  /**
+   * Clears stored events and reseeds. Local-mode only: it must never wipe rows
+   * that live in Supabase.
+   */
   reset(ownerId = 'user-1') {
+    if (this.backend === 'supabase') return;
     this.events = seedEvents(ownerId);
     this.persist();
     this.emit();

@@ -23,6 +23,7 @@ import TaskModal from './components/TaskModal';
 import TimesheetsModal from './components/TimesheetsModal';
 import { notificationService } from './services/notificationService';
 import { reminderService } from './services/reminderService';
+import { calendarService } from './services/calendarService';
 import { 
   MenuIcon, 
   PlusIcon, 
@@ -307,6 +308,16 @@ const App: React.FC = () => {
       return () => clearInterval(timer);
     }
   }, [allTasks, projects]);
+
+  // Connect the calendar store as soon as someone signs in, so meeting reminders
+  // have events to work from before the Planner is ever opened.
+  useEffect(() => {
+    if (!currentUser) {
+      calendarService.disconnect();
+      return;
+    }
+    calendarService.connect(currentUser.uid);
+  }, [currentUser]);
 
   // Meeting + deadline reminders run app-wide, not just while the Planner is open,
   // and are re-synced periodically so a long-lived tab keeps scheduling ahead.

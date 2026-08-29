@@ -1,7 +1,8 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { 
   User, Project, Task, Comment, TimeEntry, Milestone, 
-  Portfolio, Goal, CustomField, Attachment, ApprovalRequest 
+  Portfolio, Goal, CustomField, Attachment, ApprovalRequest,
+  CalendarEvent 
 } from '../types';
 
 // Types for Supabase database tables
@@ -81,6 +82,32 @@ export interface Database {
         };
         Insert: Omit<Database['public']['Tables']['tasks']['Row'], 'created_at' | 'updated_at'>;
         Update: Partial<Database['public']['Tables']['tasks']['Insert']>;
+      };
+      calendar_events: {
+        Row: {
+          id: string;
+          title: string;
+          description?: string;
+          type: string;
+          owner_id: string;
+          start_time: string;
+          end_time: string;
+          is_all_day: boolean;
+          location?: string | null;
+          conference_link?: string | null;
+          attendees: any[];
+          project_id?: string | null;
+          task_ids: string[];
+          color?: string | null;
+          reminders: any[];
+          recurrence?: any | null;
+          exceptions: string[];
+          status: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['calendar_events']['Row'], 'created_at' | 'updated_at'>;
+        Update: Partial<Database['public']['Tables']['calendar_events']['Insert']>;
       };
     };
   };
@@ -424,6 +451,168 @@ class SupabaseService {
       tags: dbProject.tags,
       portfolioId: dbProject.portfolio_id
     };
+  }
+
+  // --- Calendar events --- //
+
+  /** Whether a Supabase client was successfully configured at construction time. */
+  get available(): boolean {
+    return this.isAvailable;
+  }
+
+  /**
+   * Events the signed-in user owns or is invited to. RLS does the filtering, so
+   * a plain select returns exactly the rows this user may see.
+   */
+  async getCalendarEvents(): Promise<CalendarEvent[]> {
+    this.checkAvailability();
+    const { data, error } = await this.supabase!
+      .from('calendar_events')
+      .select('*')
+      .order('start_time', { ascending: true });
+
+    if (error) throw error;
+
+    return data.map(this.mapEventFromDB);
+  }
+
+  async createCalendarEvent(event: CalendarEvent): Promise<CalendarEvent> {
+    this.checkAvailability();
+    const { data, error } = await this.supabase!
+      .from('calendar_events')
+      .insert(this.mapEventToDB(event))
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return this.mapEventFromDB(data);
+  }
+
+  async updateCalendarEvent(eventId: string, updates: Partial<CalendarEvent>): Promise<CalendarEvent> {
+    this.checkAvailability();
+    const { data, error } = await this.supabase!
+      .from('calendar_events')
+      .update(this.mapEventUpdatesToDB(updates))
+      .eq('id', eventId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return this.mapEventFromDB(data);
+  }
+
+  async deleteCalendarEvent(eventId: string): Promise<void> {
+    this.checkAvailability();
+    const { error } = await this.supabase!
+      .from('calendar_events')
+      .delete()
+      .eq('id', eventId);
+
+    if (error) throw error;
+  }
+
+  /** Pushes the full event list to `callback` whenever any visible row changes. */
+  subscribeToCalendarEvents(callback: (events: CalendarEvent[]) => void): () => void {
+    this.checkAvailability();
+    const channel = this.supabase!
+      .channel('calendar_events:all')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'calendar_events' },
+        async () => {
+          try {
+            callback(await this.getCalendarEvents());
+          } catch (error) {
+            console.warn('Failed to refresh calendar events after a change:', error);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      this.supabase!.removeChannel(channel);
+    };
+  }
+
+  private mapEventFromDB(row: Database['public']['Tables']['calendar_events']['Row']): CalendarEvent {
+    return {
+      id: row.id,
+      title: row.title,
+      description: row.description || '',
+      type: row.type as any,
+      ownerId: row.owner_id,
+      start: new Date(row.start_time),
+      end: new Date(row.end_time),
+      isAllDay: row.is_all_day,
+      location: row.location || undefined,
+      conferenceLink: row.conference_link || undefined,
+      attendees: row.attendees || [],
+      projectId: row.project_id || undefined,
+      taskIds: row.task_ids || [],
+      color: row.color || undefined,
+      reminders: row.reminders || [],
+      recurrence: row.recurrence
+        ? { ...row.recurrence, until: row.recurrence.until ? new Date(row.recurrence.until) : null }
+        : null,
+      exceptions: row.exceptions || [],
+      status: row.status as any,
+      createdAt: new Date(row.created_at),
+      updatedAt: new Date(row.updated_at),
+    };
+  }
+
+  private mapEventToDB(event: CalendarEvent): Database['public']['Tables']['calendar_events']['Insert'] {
+    return {
+      id: event.id,
+      title: event.title,
+      description: event.description || '',
+      type: event.type,
+      owner_id: event.ownerId,
+      start_time: event.start.toISOString(),
+      end_time: event.end.toISOString(),
+      is_all_day: event.isAllDay,
+      location: event.location ?? null,
+      conference_link: event.conferenceLink ?? null,
+      attendees: event.attendees || [],
+      project_id: event.projectId ?? null,
+      task_ids: event.taskIds || [],
+      color: event.color ?? null,
+      reminders: event.reminders || [],
+      recurrence: event.recurrence
+        ? { ...event.recurrence, until: event.recurrence.until ? new Date(event.recurrence.until).toISOString() : null }
+        : null,
+      exceptions: event.exceptions || [],
+      status: event.status,
+    };
+  }
+
+  private mapEventUpdatesToDB(updates: Partial<CalendarEvent>): Partial<Database['public']['Tables']['calendar_events']['Update']> {
+    const out: any = {};
+
+    if (updates.title !== undefined) out.title = updates.title;
+    if (updates.description !== undefined) out.description = updates.description;
+    if (updates.type !== undefined) out.type = updates.type;
+    if (updates.start !== undefined) out.start_time = updates.start.toISOString();
+    if (updates.end !== undefined) out.end_time = updates.end.toISOString();
+    if (updates.isAllDay !== undefined) out.is_all_day = updates.isAllDay;
+    if (updates.location !== undefined) out.location = updates.location ?? null;
+    if (updates.conferenceLink !== undefined) out.conference_link = updates.conferenceLink ?? null;
+    if (updates.attendees !== undefined) out.attendees = updates.attendees;
+    if (updates.projectId !== undefined) out.project_id = updates.projectId ?? null;
+    if (updates.taskIds !== undefined) out.task_ids = updates.taskIds;
+    if (updates.color !== undefined) out.color = updates.color ?? null;
+    if (updates.reminders !== undefined) out.reminders = updates.reminders;
+    if (updates.recurrence !== undefined) {
+      out.recurrence = updates.recurrence
+        ? { ...updates.recurrence, until: updates.recurrence.until ? new Date(updates.recurrence.until).toISOString() : null }
+        : null;
+    }
+    if (updates.exceptions !== undefined) out.exceptions = updates.exceptions;
+    if (updates.status !== undefined) out.status = updates.status;
+
+    return out;
   }
 
   private mapTaskFromDB(dbTask: Database['public']['Tables']['tasks']['Row']): Task {

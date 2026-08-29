@@ -79,6 +79,7 @@ const EventModal: React.FC<EventModalProps> = ({
     existing?.recurrence?.until ? dateKey(new Date(existing.recurrence.until)) : ''
   );
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const durationLabel = useMemo(() => {
     if (isAllDay) return 'All day';
@@ -95,7 +96,7 @@ const EventModal: React.FC<EventModalProps> = ({
   const toggle = <T,>(list: T[], value: T): T[] =>
     list.includes(value) ? list.filter(v => v !== value) : [...list, value];
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!title.trim()) {
       setError('Give the event a title.');
       return;
@@ -155,23 +156,39 @@ const EventModal: React.FC<EventModalProps> = ({
       ownerId: existing?.ownerId || currentUser.uid,
     };
 
-    const saved = existing
-      ? calendarService.updateEvent(existing.id, payload)
-      : calendarService.createEvent(payload);
+    setSaving(true);
+    try {
+      const saved = existing
+        ? await calendarService.updateEvent(existing.id, payload)
+        : await calendarService.createEvent(payload);
 
-    if (saved) onSaved(saved);
-    onClose();
+      if (saved) onSaved(saved);
+      onClose();
+    } catch (err: any) {
+      // A rejected write has already rolled the calendar back, so keep the modal
+      // open with the user's input intact rather than closing on a silent loss.
+      setError(err?.message || 'Could not save this event. Please try again.');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleDelete = (scope: 'occurrence' | 'series') => {
+  const handleDelete = async (scope: 'occurrence' | 'series') => {
     if (!existing) return;
-    if (scope === 'series' || !existing.recurrence) {
-      calendarService.deleteEvent(existing.id);
-    } else if (occurrence) {
-      calendarService.deleteOccurrence(existing.id, occurrence.start);
+    setSaving(true);
+    try {
+      if (scope === 'series' || !existing.recurrence) {
+        await calendarService.deleteEvent(existing.id);
+      } else if (occurrence) {
+        await calendarService.deleteOccurrence(existing.id, occurrence.start);
+      }
+      onDeleted?.(existing.id);
+      onClose();
+    } catch (err: any) {
+      setError(err?.message || 'Could not delete this event. Please try again.');
+    } finally {
+      setSaving(false);
     }
-    onDeleted?.(existing.id);
-    onClose();
   };
 
   const fieldBase = 'px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500';
@@ -393,7 +410,8 @@ const EventModal: React.FC<EventModalProps> = ({
               <>
                 <button
                   onClick={() => handleDelete(existing?.recurrence ? 'occurrence' : 'series')}
-                  className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950 transition-colors"
+                  disabled={saving}
+                  className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950 transition-colors disabled:opacity-50"
                 >
                   <TrashIcon className="w-3.5 h-3.5" />
                   <span>{existing?.recurrence ? 'Delete this one' : 'Delete'}</span>
@@ -401,7 +419,8 @@ const EventModal: React.FC<EventModalProps> = ({
                 {existing?.recurrence && (
                   <button
                     onClick={() => handleDelete('series')}
-                    className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950 transition-colors"
+                    disabled={saving}
+                    className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950 transition-colors disabled:opacity-50"
                   >
                     Delete series
                   </button>
@@ -418,9 +437,10 @@ const EventModal: React.FC<EventModalProps> = ({
             </button>
             <button
               onClick={handleSave}
-              className="px-4 py-2 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white shadow-sm transition-colors"
+              disabled={saving}
+              className="px-4 py-2 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white shadow-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {isEditing ? 'Save changes' : 'Add to calendar'}
+              {saving ? 'Saving…' : isEditing ? 'Save changes' : 'Add to calendar'}
             </button>
           </div>
         </div>

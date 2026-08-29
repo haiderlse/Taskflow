@@ -149,8 +149,33 @@ a due time is set), and at the deadline. Reminders missed while the tab was
 closed still fire on the next load if they are less than 10 minutes stale, and
 each one fires only once — the fired set is remembered in `localStorage`.
 
-Events are stored in `localStorage` in demo mode and in the `calendar_events`
-table when Supabase is configured.
+#### Where calendar events are stored
+
+The planner picks a backend automatically and shows which one is live as a badge
+in the toolbar — **Synced** (green) or **This browser only** (grey).
+
+| Condition | Backend | Behaviour |
+|---|---|---|
+| Supabase configured **and** signed in through Supabase Auth | `calendar_events` table | Events sync across devices; a realtime subscription pushes changes from other sessions into the open tab |
+| Anything else — no Supabase keys, or a demo-mode login | `localStorage` | Events persist in that one browser only |
+
+Demo logins always stay local, by design: `calendar_events.owner_id` is a
+`UUID REFERENCES users(uid)` and the RLS policies compare it against
+`auth.uid()`, so an id like `user-1` can satisfy neither. The service checks for
+a UUID before attempting any remote write.
+
+Reads are served synchronously from an in-memory cache so the grid renders
+without waiting on the network. Writes apply to the cache first and persist
+afterwards; if a remote write fails, the cache rolls back, the calendar returns
+to its previous state, and the event modal stays open with your input intact and
+the error shown. If Supabase is configured but unreachable, the planner falls
+back to local storage rather than failing — the badge turns red and names the
+reason.
+
+To enable syncing: run `supabase-schema.sql` in the Supabase SQL Editor (it
+creates `calendar_events` with its RLS policies), then set `VITE_SUPABASE_URL`
+and `VITE_SUPABASE_ANON_KEY` in `.env.local` and sign in with a real account
+rather than a demo persona.
 
 ### Real-time Collaboration
 - Live task updates across users

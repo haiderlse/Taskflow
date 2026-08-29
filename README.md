@@ -65,6 +65,46 @@ npm run build
 npm run preview
 ```
 
+## Deploying to GitHub Pages
+
+The app is a static site — Supabase is the whole backend — so GitHub Pages can
+host it for free, and it will be reachable from your phone without your laptop
+running.
+
+`.github/workflows/deploy.yml` builds and publishes on every push to `main`.
+Three things have to be set up once, in the repository settings:
+
+1. **Make the repository public.** Free GitHub Pages requires it. This publishes
+   the *code*, not your data — that stays in Supabase behind RLS.
+2. **Settings → Pages → Build and deployment → Source: GitHub Actions.**
+3. **Settings → Secrets and variables → Actions → New repository secret**, twice:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+
+The site then appears at `https://<user>.github.io/<repo>/`. The workflow passes
+`VITE_BASE_PATH` so assets resolve under that subpath; locally the base stays `/`.
+
+### About those keys
+
+`VITE_*` variables are **inlined into the JavaScript bundle at build time**. They
+are readable by anyone who opens the deployed site. This is expected: the anon
+key is a public project identifier, not a credential. **Row Level Security is
+what protects your data** — which is why the policies in `supabase-schema.sql`
+matter so much.
+
+Storing them as Actions secrets keeps them out of the source history and the
+build logs, and lets you rotate without a commit. It does not make them private
+once built, and nothing can.
+
+**Never** put a `service_role` key in this repository, in a `VITE_*` variable, or
+in an Actions secret consumed by this build. It bypasses RLS completely.
+
+### Known limitation
+
+Reminders fire only while a browser tab is open — hosting does not change that.
+Background push would need a service worker and the Web Push API, which is not
+built.
+
 ## Creating your account
 
 Authentication is Supabase-only — there is no demo login and no local fallback.

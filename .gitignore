@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local Cloudflare dev vars (never commit)
+.dev.vars
+
+# Wrangler local state (local D1 database, caches)
+.wrangler/

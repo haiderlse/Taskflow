@@ -921,10 +921,12 @@ import { Router } from 'express';
 import type Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 import { rowToEntity, entityToRow, PROJECT_SPEC } from '../db/mappers';
+import { assertValidColumns, getTableColumns, quoteIdent } from '../db/sql';
 import type { Project } from '../../types';
 
 export function projectsRouter(db: Database.Database) {
   const r = Router();
+  const columns = getTableColumns(db, 'projects'); // allowlist read from the live schema
   const one = (id: string) =>
     db.prepare('SELECT * FROM projects WHERE id = ?').get(id) as Record<string, unknown> | undefined;
 
@@ -952,15 +954,11 @@ export function projectsRouter(db: Database.Database) {
       ...req.body,
     };
     const row = entityToRow(entity, PROJECT_SPEC);
+    assertValidColumns(row, columns); // validate BEFORE building any SQL text
     const cols = Object.keys(row);
-    try {
-      db.prepare(
-        `INSERT INTO projects (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`
-      ).run(...Object.values(row));
-    } catch (err) {
-      // FK violation: ownerId does not exist
-      return res.status(400).json({ error: (err as Error).message });
-    }
+    db.prepare(
+      `INSERT INTO projects (${cols.map(quoteIdent).join(',')}) VALUES (${cols.map(() => '?').join(',')})`
+    ).run(...Object.values(row));
     res.status(201).json(rowToEntity<Project>(one(entity.id)!, PROJECT_SPEC));
   });
 
@@ -968,8 +966,9 @@ export function projectsRouter(db: Database.Database) {
     if (!one(req.params.id)) return res.status(404).json({ error: 'project not found' });
     const row = entityToRow({ ...req.body, updatedAt: new Date().toISOString() }, PROJECT_SPEC);
     delete row.id;
+    assertValidColumns(row, columns); // validate BEFORE building any SQL text
     const cols = Object.keys(row);
-    db.prepare(`UPDATE projects SET ${cols.map((c) => `${c} = ?`).join(',')} WHERE id = ?`)
+    db.prepare(`UPDATE projects SET ${cols.map((c) => `${quoteIdent(c)} = ?`).join(',')} WHERE id = ?`)
       .run(...Object.values(row), req.params.id);
     res.json(rowToEntity<Project>(one(req.params.id)!, PROJECT_SPEC));
   });
@@ -1106,12 +1105,12 @@ import { Router } from 'express';
 import type Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 import { rowToEntity, entityToRow, TASK_SPEC } from '../db/mappers';
+import { assertValidColumns, getTableColumns, quoteIdent } from '../db/sql';
 import type { Task } from '../../types';
-
-const quote = (c: string) => (c === 'order' ? '"order"' : c);
 
 export function tasksRouter(db: Database.Database) {
   const r = Router();
+  const columns = getTableColumns(db, 'tasks'); // allowlist read from the live schema
   const one = (id: string) =>
     db.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as Record<string, unknown> | undefined;
 
@@ -1140,14 +1139,11 @@ export function tasksRouter(db: Database.Database) {
       ...req.body,
     };
     const row = entityToRow(entity, TASK_SPEC);
+    assertValidColumns(row, columns); // validate BEFORE building any SQL text
     const cols = Object.keys(row);
-    try {
-      db.prepare(
-        `INSERT INTO tasks (${cols.map(quote).join(',')}) VALUES (${cols.map(() => '?').join(',')})`
-      ).run(...Object.values(row));
-    } catch (err) {
-      return res.status(400).json({ error: (err as Error).message });
-    }
+    db.prepare(
+      `INSERT INTO tasks (${cols.map(quoteIdent).join(',')}) VALUES (${cols.map(() => '?').join(',')})`
+    ).run(...Object.values(row));
     res.status(201).json(rowToEntity<Task>(one(entity.id)!, TASK_SPEC));
   });
 
@@ -1155,8 +1151,9 @@ export function tasksRouter(db: Database.Database) {
     if (!one(req.params.id)) return res.status(404).json({ error: 'task not found' });
     const row = entityToRow({ ...req.body, updatedAt: new Date().toISOString() }, TASK_SPEC);
     delete row.id;
+    assertValidColumns(row, columns); // validate BEFORE building any SQL text
     const cols = Object.keys(row);
-    db.prepare(`UPDATE tasks SET ${cols.map((c) => `${quote(c)} = ?`).join(',')} WHERE id = ?`)
+    db.prepare(`UPDATE tasks SET ${cols.map((c) => `${quoteIdent(c)} = ?`).join(',')} WHERE id = ?`)
       .run(...Object.values(row), req.params.id);
     res.json(rowToEntity<Task>(one(req.params.id)!, TASK_SPEC));
   });

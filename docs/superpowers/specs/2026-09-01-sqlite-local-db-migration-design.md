@@ -113,7 +113,26 @@ no pool, no async ceremony — which is correct for a single-user local file.
 
 ## Schema conversion
 
-Postgres DDL does not port to SQLite unchanged:
+**The SQLite schema is derived from `types.ts`, not from `supabase-schema.sql`.**
+The committed SQL schema is behind the app's real data model and would silently
+drop live fields:
+
+| Entity | Present in `types.ts`, absent from `supabase-schema.sql` |
+|---|---|
+| `Project` | `sections`, `brief`, `statusUpdates`, `healthStatus`, `isFavorite` |
+| `Task` | `projectIds`, `sectionId`, `collaboratorIds`, `blockedBy`, `blocking`, `approval`, `isMilestone`, `subtaskItems`, `recurrence`, `activities` |
+
+`supabase-schema.sql` is a starting point for column names and types only.
+`types.ts` is the authority.
+
+Nested object fields (`sections`, `brief`, `statusUpdates`, `subtaskItems`,
+`recurrence`, `activities`, `attachments`, `approval`, `customFields`) are stored
+as JSON TEXT columns rather than normalised into child tables. They are read and
+written whole with their parent, never queried across, so normalising them would
+add join complexity and mapping surface for no gain. Revisit only if a feature
+needs to query inside them.
+
+Beyond that, Postgres DDL does not port to SQLite unchanged:
 
 | Postgres | SQLite | Columns affected |
 |---|---|---|

@@ -1,4 +1,7 @@
+import { mkdirSync } from 'node:fs';
 import { createApp } from './app';
+
+mkdirSync('data', { recursive: true });
 
 const PORT = 4000;
 const HOST = '127.0.0.1'; // never 0.0.0.0 — no auth guards this API

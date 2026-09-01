@@ -3,6 +3,7 @@ import type Database from 'better-sqlite3';
 import { openDb, initSchema } from './db/connection';
 import { seed } from './db/seed';
 import { usersRouter } from './routes/users';
+import { projectsRouter } from './routes/projects';
 import { BadRequestError } from './db/sql';
 
 // Never a stack trace, never a file path, never a driver-internal message —
@@ -41,6 +42,7 @@ export function createApp(injected?: Database.Database) {
   app.use(express.json({ limit: '5mb' }));
   app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
   app.use('/api/users', usersRouter(db));
+  app.use('/api/projects', projectsRouter(db));
   // Error-handling middleware must be registered last, after all routes.
   app.use(errorHandler);
   return app;

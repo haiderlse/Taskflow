@@ -47,7 +47,23 @@ export function entityToRow(
     const col = toSnake(key);
     if (val === null) { out[col] = null; }
     else if (spec.json.includes(key)) out[col] = JSON.stringify(val);
-    else if (spec.dates.includes(key)) out[col] = new Date(val as string).toISOString();
+    else if (spec.dates.includes(key)) {
+      // Handle Date objects directly
+      if (val instanceof Date) {
+        out[col] = val.toISOString();
+      } else {
+        const strVal = String(val);
+        // Detect naive datetime: has time component but no timezone designator
+        if (strVal.match(/\d{2}:\d{2}/) && !strVal.match(/Z$|[+-]\d{2}:\d{2}$/)) {
+          throw new Error(`${key}: naive datetime "${strVal}" lacks timezone; must be ISO 8601 with explicit Z or offset`);
+        }
+        const date = new Date(strVal);
+        if (Number.isNaN(date.getTime())) {
+          throw new Error(`${key}: unparseable datetime "${strVal}"`);
+        }
+        out[col] = date.toISOString();
+      }
+    }
     else if (spec.bools.includes(key)) out[col] = val ? 1 : 0;
     else out[col] = val;
   }

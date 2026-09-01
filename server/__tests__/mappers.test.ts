@@ -24,6 +24,17 @@ describe('rowToEntity', () => {
     expect(rowToEntity<any>({ is_active: 1 }, USER_SPEC).isActive).toBe(true);
     expect(rowToEntity<any>({ is_active: 0 }, USER_SPEC).isActive).toBe(false);
   });
+
+  it('preserves null for JSON columns without attempting parse', () => {
+    const e = rowToEntity<any>({ approval: null }, TASK_SPEC);
+    expect(e.approval).toBeNull();
+  });
+
+  it('handles Date object input in rowToEntity gracefully', () => {
+    const d = new Date('2026-09-01T10:00:00Z');
+    const e = rowToEntity<any>({ created_at: d }, TASK_SPEC);
+    expect(e.createdAt).toBeInstanceOf(Date);
+  });
 });
 
 describe('entityToRow', () => {
@@ -42,5 +53,42 @@ describe('entityToRow', () => {
 
   it('drops undefined values so partial updates are safe', () => {
     expect('title' in entityToRow({ id: 't1', title: undefined }, TASK_SPEC)).toBe(false);
+  });
+
+  it('preserves null for JSON columns in entityToRow', () => {
+    expect(entityToRow({ approval: null }, TASK_SPEC).approval).toBeNull();
+  });
+
+  it('passes through Date objects unchanged', () => {
+    const d = new Date('2026-09-01T10:00:00.000Z');
+    const row = entityToRow({ createdAt: d }, TASK_SPEC);
+    expect(row.created_at).toBe(d.toISOString());
+  });
+
+  it('accepts date-only strings and converts to ISO', () => {
+    const row = entityToRow({ createdAt: '2026-09-01' }, TASK_SPEC);
+    expect(row.created_at).toContain('2026-09-01');
+  });
+
+  it('accepts ISO strings with Z suffix', () => {
+    const row = entityToRow({ createdAt: '2026-09-01T10:00:00.000Z' }, TASK_SPEC);
+    expect(row.created_at).toBe('2026-09-01T10:00:00.000Z');
+  });
+
+  it('accepts ISO strings with timezone offset', () => {
+    const row = entityToRow({ createdAt: '2026-09-01T10:00:00+05:00' }, TASK_SPEC);
+    expect(row.created_at).toBe('2026-09-01T05:00:00.000Z');
+  });
+
+  it('throws on naive datetime string (no timezone)', () => {
+    expect(() => {
+      entityToRow({ createdAt: '2026-09-01T10:00:00' }, TASK_SPEC);
+    }).toThrow(/createdAt.*naive datetime/);
+  });
+
+  it('throws on unparseable datetime string', () => {
+    expect(() => {
+      entityToRow({ createdAt: 'not-a-date' }, TASK_SPEC);
+    }).toThrow(/createdAt.*unparseable/);
   });
 });

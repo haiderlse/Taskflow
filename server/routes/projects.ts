@@ -19,7 +19,6 @@ export function projectsRouter(db: Database.Database) {
   r.post('/', (req, res) => {
     const now = new Date().toISOString();
     const entity = {
-      id: randomUUID(),
       members: [req.body.ownerId],
       createdAt: now,
       updatedAt: now,
@@ -33,6 +32,7 @@ export function projectsRouter(db: Database.Database) {
       customFields: [],
       tags: [],
       ...req.body,
+      id: randomUUID(), // placed last: a server-generated id must always win over a client-supplied one
     };
     const row = entityToRow(entity, PROJECT_SPEC);
     assertValidColumns(row, columns); // validate BEFORE building any SQL text

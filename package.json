@@ -10,7 +10,8 @@
     "lint": "tsc --noEmit",
     "server": "tsx watch server/index.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",

@@ -1,14 +1,14 @@
 import type Database from 'better-sqlite3';
 import { entityToRow, USER_SPEC, PROJECT_SPEC, TASK_SPEC, type FieldSpec } from './mappers';
-import type { Project, Task } from '../../types';
+import type { Project, Task, User } from '../../types';
 
 const now = new Date().toISOString();
 
 // Copied verbatim from services/enhancedApi.ts:28-33
-const USERS = [
-  { uid: 'user-1', email: 'ali@example.com', displayName: 'Ali', role: 'admin', workload: 40, isActive: true, createdAt: now },
-  { uid: 'user-2', email: 'bob@example.com', displayName: 'Bob', role: 'manager', workload: 35, isActive: true, createdAt: now },
-  { uid: 'user-3', email: 'charlie@example.com', displayName: 'Charlie', role: 'member', workload: 40, isActive: true, createdAt: now },
+const USERS: User[] = [
+  { uid: 'user-1', email: 'ali@example.com', displayName: 'Ali', role: 'admin', workload: 40, isActive: true, createdAt: new Date(now) },
+  { uid: 'user-2', email: 'bob@example.com', displayName: 'Bob', role: 'manager', workload: 35, isActive: true, createdAt: new Date(now) },
+  { uid: 'user-3', email: 'charlie@example.com', displayName: 'Charlie', role: 'member', workload: 40, isActive: true, createdAt: new Date(now) },
 ];
 
 // Copied verbatim from services/enhancedApi.ts:34-225 — keep every field, including
@@ -437,7 +437,7 @@ export function seed(db: Database.Database) {
   if (n > 0) return; // idempotent: only seed an empty database
 
   db.transaction(() => {
-    insertAll(db, 'users', USERS as Record<string, unknown>[], USER_SPEC);
+    insertAll(db, 'users', USERS, USER_SPEC);
     insertAll(db, 'projects', PROJECTS, PROJECT_SPEC);
     insertAll(db, 'tasks', TASKS, TASK_SPEC);
   })();

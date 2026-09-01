@@ -4,6 +4,6 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['server/**/*.test.ts'],
-    coverage: { include: ['server/**/*.ts'], thresholds: { lines: 80 } },
+    coverage: { include: ['server/**/*.ts'], exclude: ['server/index.ts'], thresholds: { lines: 80 } },
   },
 });

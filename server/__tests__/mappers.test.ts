@@ -91,4 +91,22 @@ describe('entityToRow', () => {
       entityToRow({ createdAt: 'not-a-date' }, TASK_SPEC);
     }).toThrow(/createdAt.*unparseable/);
   });
+
+  it('throws on invalid Date object', () => {
+    const invalidDate = new Date('garbage');
+    expect(() => {
+      entityToRow({ createdAt: invalidDate }, TASK_SPEC);
+    }).toThrow(/createdAt/);
+  });
+
+  it('accepts ISO strings with no-colon offset (basic format)', () => {
+    const row = entityToRow({ createdAt: '2026-09-01T10:00:00-0500' }, TASK_SPEC);
+    expect(row.created_at).toBe('2026-09-01T15:00:00.000Z');
+  });
+
+  it('accepts numeric epoch-millis timestamp', () => {
+    const row = entityToRow({ createdAt: 1738368000000 }, TASK_SPEC);
+    expect(typeof row.created_at).toBe('string');
+    expect(row.created_at).toBe('2025-02-01T00:00:00.000Z');
+  });
 });

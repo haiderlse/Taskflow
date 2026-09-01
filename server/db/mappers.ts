@@ -50,11 +50,22 @@ export function entityToRow(
     else if (spec.dates.includes(key)) {
       // Handle Date objects directly
       if (val instanceof Date) {
+        if (Number.isNaN(val.getTime())) {
+          throw new Error(`${key}: invalid Date object`);
+        }
         out[col] = val.toISOString();
+      } else if (typeof val === 'number') {
+        // Handle numeric epoch-millis timestamp
+        const date = new Date(val);
+        if (Number.isNaN(date.getTime())) {
+          throw new Error(`${key}: unparseable timestamp ${val}`);
+        }
+        out[col] = date.toISOString();
       } else {
         const strVal = String(val);
         // Detect naive datetime: has time component but no timezone designator
-        if (strVal.match(/\d{2}:\d{2}/) && !strVal.match(/Z$|[+-]\d{2}:\d{2}$/)) {
+        // Regex allows: Z, [+-]HH:MM, or [+-]HHMM (basic format)
+        if (strVal.match(/\d{2}:\d{2}/) && !strVal.match(/(?:Z|[+-]\d{2}:?\d{2})$/i)) {
           throw new Error(`${key}: naive datetime "${strVal}" lacks timezone; must be ISO 8601 with explicit Z or offset`);
         }
         const date = new Date(strVal);

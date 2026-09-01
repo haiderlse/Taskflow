@@ -12,3 +12,9 @@ describe('GET /api/health', () => {
     expect(res.body).toEqual({ status: 'ok' });
   });
 });
+
+describe('createApp() database guard', () => {
+  it('refuses to open the default data/taskflow.db when no db is injected under the test runner', () => {
+    expect(() => createApp()).toThrow(/injected database/);
+  });
+});

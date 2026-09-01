@@ -2,10 +2,15 @@ import { Router } from 'express';
 import type Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 import { rowToEntity, entityToRow, USER_SPEC } from '../db/mappers';
+import { assertValidColumns, getTableColumns, quoteIdent } from '../db/sql';
 import type { User } from '../../types';
 
 export function usersRouter(db: Database.Database) {
   const r = Router();
+  // Read once from the live schema at router construction time — this is
+  // the allowlist that every write validates against before any column
+  // name is interpolated into SQL text.
+  const columns = getTableColumns(db, 'users');
   const one = (uid: string) =>
     db.prepare('SELECT * FROM users WHERE uid = ?').get(uid) as Record<string, unknown> | undefined;
 
@@ -29,15 +34,17 @@ export function usersRouter(db: Database.Database) {
 
   r.post('/', (req, res) => {
     const entity = {
-      uid: randomUUID(),
       isActive: true,
       createdAt: new Date().toISOString(),
       ...req.body,
+      uid: randomUUID(), // placed last: a server-generated uid must always win over a client-supplied one
     };
     const row = entityToRow(entity, USER_SPEC);
+    assertValidColumns(row, columns); // validate first — build SQL text only after every key is proven a real column
     const cols = Object.keys(row);
+    const idents = cols.map(quoteIdent);
     db.prepare(
-      `INSERT INTO users (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`
+      `INSERT INTO users (${idents.join(',')}) VALUES (${cols.map(() => '?').join(',')})`
     ).run(...Object.values(row));
     res.status(201).json(rowToEntity<User>(one(entity.uid)!, USER_SPEC));
   });
@@ -45,10 +52,12 @@ export function usersRouter(db: Database.Database) {
   r.patch('/:uid', (req, res) => {
     if (!one(req.params.uid)) return res.status(404).json({ error: 'user not found' });
     const row = entityToRow(req.body, USER_SPEC);
+    assertValidColumns(row, columns); // validate first — build SQL text only after every key is proven a real column
     delete row.uid;
     const cols = Object.keys(row);
     if (cols.length) {
-      db.prepare(`UPDATE users SET ${cols.map((c) => `${c} = ?`).join(',')} WHERE uid = ?`)
+      const idents = cols.map(quoteIdent);
+      db.prepare(`UPDATE users SET ${idents.map((c) => `${c} = ?`).join(',')} WHERE uid = ?`)
         .run(...Object.values(row), req.params.uid);
     }
     res.json(rowToEntity<User>(one(req.params.uid)!, USER_SPEC));

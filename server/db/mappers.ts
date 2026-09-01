@@ -1,3 +1,5 @@
+import { BadRequestError } from './sql';
+
 export type FieldSpec = { json: string[]; dates: string[]; bools: string[] };
 
 const toCamel = (s: string) => s.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
@@ -51,14 +53,14 @@ export function entityToRow(
       // Handle Date objects directly
       if (val instanceof Date) {
         if (Number.isNaN(val.getTime())) {
-          throw new Error(`${key}: invalid Date object`);
+          throw new BadRequestError(`${key}: invalid Date object`);
         }
         out[col] = val.toISOString();
       } else if (typeof val === 'number') {
         // Handle numeric epoch-millis timestamp
         const date = new Date(val);
         if (Number.isNaN(date.getTime())) {
-          throw new Error(`${key}: unparseable timestamp ${val}`);
+          throw new BadRequestError(`${key}: unparseable timestamp ${val}`);
         }
         out[col] = date.toISOString();
       } else {
@@ -66,11 +68,11 @@ export function entityToRow(
         // Detect naive datetime: has time component but no timezone designator
         // Regex allows: Z, [+-]HH:MM, or [+-]HHMM (basic format)
         if (strVal.match(/\d{2}:\d{2}/) && !strVal.match(/(?:Z|[+-]\d{2}:?\d{2})$/i)) {
-          throw new Error(`${key}: naive datetime "${strVal}" lacks timezone; must be ISO 8601 with explicit Z or offset`);
+          throw new BadRequestError(`${key}: naive datetime "${strVal}" lacks timezone; must be ISO 8601 with explicit Z or offset`);
         }
         const date = new Date(strVal);
         if (Number.isNaN(date.getTime())) {
-          throw new Error(`${key}: unparseable datetime "${strVal}"`);
+          throw new BadRequestError(`${key}: unparseable datetime "${strVal}"`);
         }
         out[col] = date.toISOString();
       }

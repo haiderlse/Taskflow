@@ -196,10 +196,14 @@ describe('database connection', () => {
   it('rejects a task referencing a missing project', () => {
     const db = openDb(':memory:');
     initSchema(db);
+    // created_at/updated_at are NOT NULL with no default — supply them so the
+    // statement fails on the FOREIGN KEY, not on NOT NULL.
+    const now = new Date().toISOString();
     expect(() =>
-      db.prepare('INSERT INTO tasks (id, title, project_id) VALUES (?,?,?)')
-        .run('t1', 'orphan', 'no-such-project')
-    ).toThrow();
+      db.prepare(
+        'INSERT INTO tasks (id, title, project_id, created_at, updated_at) VALUES (?,?,?,?,?)'
+      ).run('t1', 'orphan', 'no-such-project', now, now)
+    ).toThrow(/FOREIGN KEY/i);
   });
 });
 ```
@@ -1355,18 +1359,28 @@ import { apiClient } from './apiClient';
 
 - [ ] **Step 3: Replace the availability probe**
 
-The block around `services/enhancedApi.ts:549-557` probes Supabase and sets `isSupabaseAvailable`. Replace it with an API health probe:
+`services/enhancedApi.ts:542-562` defines `initializeDatabase()` and calls it
+fire-and-forget at module load. That races: `isSupabaseAvailable` is still `false`
+during the first renders. Under Supabase that only meant briefly stale reads; with
+a local API it means early **writes** land in the in-memory arrays and are lost —
+the exact failure this migration exists to fix.
+
+Delete `initializeDatabase()` and its bare call. Replace with a memoized promise
+that every call site awaits, so there is no window where the flag is wrong:
 
 ```ts
-let isApiAvailable = false;
+let apiReady: Promise<boolean> | null = null;
 
-async function probeApi() {
-  try {
-    await apiClient.getUsers();
-    isApiAvailable = true;
-  } catch {
-    isApiAvailable = false; // fall back to in-memory arrays
-  }
+// Memoised: probes once, every caller awaits the same result.
+function ensureApi(): Promise<boolean> {
+  apiReady ??= apiClient
+    .getUsers()
+    .then(() => true)
+    .catch((err) => {
+      console.warn('Local API unavailable, using in-memory store:', err);
+      return false;
+    });
+  return apiReady;
 }
 ```
 
@@ -1380,10 +1394,13 @@ if (isSupabaseAvailable) {
   return await supabaseService.getUsers();
 }
 // after
-if (isApiAvailable) {
+if (await ensureApi()) {
   return await apiClient.getUsers();
 }
 ```
+
+Every call site must use `await ensureApi()` — not a bare boolean. All 17 are
+already inside `async` functions, so `await` is legal at each one.
 
 Apply to all 17 sites. `getCurrentUser`, `getUsers` (x2), `getUserById`, `createUser`, `updateUser`, `deleteUser`, `getProjects` (x2), `createProject`, `getTasksForProject` (x4), `getTasksForUser`, `createTask`, `updateTask`.
 
@@ -1402,6 +1419,9 @@ Expected: `20` — unchanged.
 
 Run: `grep -c "supabase\|Supabase" services/enhancedApi.ts`
 Expected: `0`
+
+Run: `grep -c "isSupabaseAvailable\|initializeDatabase" services/enhancedApi.ts`
+Expected: `0` — the old flag and fire-and-forget probe are fully removed.
 
 - [ ] **Step 7: Run the app end to end**
 

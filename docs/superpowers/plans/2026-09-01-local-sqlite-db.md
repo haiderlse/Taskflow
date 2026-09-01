@@ -1117,7 +1117,6 @@ export function tasksRouter(db: Database.Database) {
   r.post('/', (req, res) => {
     const now = new Date().toISOString();
     const entity = {
-      id: randomUUID(),
       description: '',
       status: 'To Do',
       projectIds: [],
@@ -1137,6 +1136,7 @@ export function tasksRouter(db: Database.Database) {
       subtaskItems: [],
       activities: [],
       ...req.body,
+      id: randomUUID(), // placed last: a server-generated id must always win over a client-supplied one
     };
     const row = entityToRow(entity, TASK_SPEC);
     assertValidColumns(row, columns); // validate BEFORE building any SQL text

@@ -1,34 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { once } from 'node:events';
-import type { Server } from 'node:http';
-import type { AddressInfo } from 'node:net';
-import { openDb, initSchema } from '../../server/db/connection';
-import { seed } from '../../server/db/seed';
-import { createApp } from '../../server/app';
 import { apiClient } from '../apiClient';
+import { startLiveApi, type LiveApi } from './support/liveApi';
 
-// Captured before any stub so the forwarding wrapper never calls itself.
-const realFetch = globalThis.fetch;
-let server: Server;
+let live: LiveApi;
 
-// apiClient requests same-origin '/api/...' paths (Vite proxies them in dev). Point those
-// paths at a real in-process server so URLs, methods, bodies and status codes are all
-// exercised against the actual routes rather than hand-written mock responses.
 beforeEach(async () => {
-  const db = openDb(':memory:');
-  initSchema(db);
-  seed(db);
-  server = createApp(db).listen(0, '127.0.0.1');
-  await once(server, 'listening');
-  const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  vi.stubGlobal('fetch', (path: string, init?: RequestInit) => realFetch(`${origin}${path}`, init));
+  live = await startLiveApi();
 });
 
-afterEach(async () => {
-  vi.unstubAllGlobals();
-  server.closeAllConnections(); // fetch keeps connections alive, which would stall close()
-  await new Promise((resolve) => server.close(resolve));
-});
+afterEach(() => live.stop());
 
 describe('apiClient users', () => {
   it('lists users with createdAt revived as a Date', async () => {

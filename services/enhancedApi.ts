@@ -16,13 +16,13 @@ import {
   CustomField,
   TaskActivity
 } from '../types';
-import { supabaseService } from './supabaseService';
+import { createApiSync, withApiSync } from './apiSync';
 import { generateNextRecurringTask, createActivityLog } from '../utils/asanaUtils';
 import { ASANA_TEMPLATES } from '../utils/templatesData';
 import { notificationService } from './notificationService';
 
-// Initialize database connection (for demo, we'll use mock data if Supabase is not available)
-let isSupabaseAvailable = false;
+// In-memory working set. apiSync (below) loads it from the local API and saves changes back;
+// without the API it stays as demo data for the session.
 
 // --- MOCK DATABASE (fallback) ---
 const USERS: User[] = [
@@ -518,7 +518,10 @@ let GOALS: Goal[] = [
 ];
 
 // --- SIMULATED LATENCY ---
-const networkDelay = (ms: number) => new Promise(res => setTimeout(res, ms));
+const sync = createApiSync({ users: USERS, projects: PROJECTS, tasks: TASKS });
+
+// Simulated latency for the offline demo only; real API calls have their own.
+const networkDelay = (ms: number) => (sync.isActive() ? Promise.resolve() : new Promise(res => setTimeout(res, ms)));
 
 // --- REAL-TIME SUBSCRIPTION SIMULATOR ---
 type CollectionName = 'tasks' | 'comments' | 'time-entries';
@@ -538,63 +541,28 @@ const notify = (key: string, data: any) => {
   }
 };
 
-// Initialize database
-const initializeDatabase = async () => {
-  try {
-    const metaEnv = (import.meta as any).env || {};
-    const supabaseUrl = metaEnv.VITE_SUPABASE_URL;
-    const supabaseKey = metaEnv.VITE_SUPABASE_ANON_KEY;
-    
-    if (supabaseUrl && supabaseKey && supabaseUrl !== 'your_supabase_project_url' && supabaseKey !== 'your_supabase_anon_key') {
-      await supabaseService.getUsers();
-      isSupabaseAvailable = true;
-      console.log('Using Supabase database');
-    } else {
-      isSupabaseAvailable = false;
-    }
-  } catch (error) {
-    console.warn('Supabase not available, using local store:', error);
-    isSupabaseAvailable = false;
-  }
-};
-
-// Call initialization
-initializeDatabase();
-
 // --- ENHANCED API FUNCTIONS ---
-export const enhancedApi = {
+// Exported through withApiSync at the bottom of this file, so internal `enhancedApi.*` calls
+// also wait for the API to load and save their changes.
+const localApi = {
   // Authentication and Users
   getCurrentUser: async (): Promise<User> => {
     await networkDelay(100);
-    if (isSupabaseAvailable) {
-      const user = await supabaseService.getCurrentUser();
-      return user || USERS[0];
-    }
-    return USERS[0];
+    return USERS.find(u => u.uid === sync.currentUserId()) || USERS[0];
   },
   
   getUsers: async (): Promise<User[]> => {
     await networkDelay(100);
-    if (isSupabaseAvailable) {
-      return await supabaseService.getUsers();
-    }
     return [...USERS];
   },
 
   getUserById: async (uid: string): Promise<User | null> => {
     await networkDelay(100);
-    if (isSupabaseAvailable) {
-      return await supabaseService.getUserById(uid);
-    }
     return USERS.find(u => u.uid === uid) || null;
   },
 
   createUser: async (userData: Partial<User>): Promise<User> => {
     await networkDelay(300);
-    
-    if (isSupabaseAvailable) {
-      return await supabaseService.createUser(userData);
-    }
     
     const newUser: User = {
       uid: userData.uid || `user-${Date.now()}`,
@@ -617,9 +585,6 @@ export const enhancedApi = {
 
   updateUser: async (uid: string, updates: Partial<User>): Promise<User | null> => {
     await networkDelay(200);
-    if (isSupabaseAvailable) {
-      return await supabaseService.updateUser(uid, updates);
-    }
     
     const userIndex = USERS.findIndex(u => u.uid === uid);
     if (userIndex === -1) return null;
@@ -644,10 +609,6 @@ export const enhancedApi = {
       throw new Error('Cannot delete the last administrator. Assign admin role to another user first.');
     }
     
-    if (isSupabaseAvailable) {
-      return await supabaseService.deleteUser(uid);
-    }
-    
     // For demo purposes, we'll actually remove the user from the array
     // In a real application, you might soft-delete by setting isActive: false
     USERS.splice(userIndex, 1);
@@ -657,9 +618,6 @@ export const enhancedApi = {
   // Projects
   getProjects: async (): Promise<Project[]> => {
     await networkDelay(300);
-    if (isSupabaseAvailable) {
-      return await supabaseService.getProjects();
-    }
     return [...PROJECTS];
   },
 
@@ -700,10 +658,6 @@ export const enhancedApi = {
       tags: projectData.tags || [],
     };
 
-    if (isSupabaseAvailable) {
-      return await supabaseService.createProject(newProject.name, newProject.ownerId);
-    }
-    
     PROJECTS.push(newProject);
     return newProject;
   },
@@ -713,9 +667,6 @@ export const enhancedApi = {
     const index = PROJECTS.findIndex(p => p.id === projectId);
     if (index === -1) throw new Error('Project not found');
     PROJECTS[index] = { ...PROJECTS[index], ...updates, updatedAt: new Date() };
-    if (isSupabaseAvailable) {
-      await (supabaseService as any).updateProject?.(projectId, updates);
-    }
     return PROJECTS[index];
   },
 
@@ -733,40 +684,21 @@ export const enhancedApi = {
   // Tasks
   getTasks: async (): Promise<Task[]> => {
     await networkDelay(400);
-    if (isSupabaseAvailable) {
-      const projects = await supabaseService.getProjects();
-      const allTasks: Task[] = [];
-      for (const project of projects) {
-        const projectTasks = await supabaseService.getTasksForProject(project.id);
-        allTasks.push(...projectTasks);
-      }
-      return allTasks;
-    }
     return [...TASKS];
   },
 
   getTaskById: async (taskId: string): Promise<Task | null> => {
     await networkDelay(200);
-    if (isSupabaseAvailable) {
-      const allTasks = await enhancedApi.getTasks();
-      return allTasks.find(t => t.id === taskId) || null;
-    }
     return TASKS.find(t => t.id === taskId) || null;
   },
 
   getTasksForUser: async (userId: string): Promise<Task[]> => {
     await networkDelay(400);
-    if (isSupabaseAvailable) {
-      return await supabaseService.getTasksForUser(userId);
-    }
     return TASKS.filter(t => t.assigneeId === userId);
   },
 
   getTasksForProject: async (projectId: string): Promise<Task[]> => {
     await networkDelay(400);
-    if (isSupabaseAvailable) {
-      return await supabaseService.getTasksForProject(projectId);
-    }
     return TASKS.filter(t => t.projectId === projectId);
   },
 
@@ -826,18 +758,9 @@ export const enhancedApi = {
       updatedAt: taskData.updatedAt || new Date(),
     };
     
-    if (isSupabaseAvailable) {
-      const created = await supabaseService.createTask(newTask);
-      notify(`tasks:${effectiveProjectId}`, await supabaseService.getTasksForProject(effectiveProjectId));
-      if (newTask.assigneeId) {
-        const creator = USERS.find(u => u.uid === newTask.createdBy) || { uid: newTask.createdBy, displayName: 'Team Member' };
-        const project = PROJECTS.find(p => p.id === effectiveProjectId);
-        notificationService.notifyTaskAssignment(newTask, creator, { uid: newTask.assigneeId }, project);
-      }
-      return created;
-    }
-    
     TASKS.push(newTask);
+    // Save now so listeners and the assignment notification see the server-assigned id.
+    await sync.persist();
     notify(`tasks:${effectiveProjectId}`, TASKS.filter(t => t.projectId === effectiveProjectId));
 
     if (newTask.assigneeId) {
@@ -861,24 +784,12 @@ export const enhancedApi = {
       if (t.blocking) t.blocking = t.blocking.filter(id => id !== taskId);
     });
     
-    if (isSupabaseAvailable) {
-      await (supabaseService as any).deleteTask?.(taskId);
-    }
     notify(`tasks:${task.projectId}`, TASKS.filter(t => t.projectId === task.projectId));
     return true;
   },
 
   updateTask: async (taskId: string, updates: Partial<Task>): Promise<Task> => {
     await networkDelay(200);
-    
-    if (isSupabaseAvailable) {
-      const updated = await supabaseService.updateTask(taskId, updates);
-      if (updated) {
-        notify(`tasks:${updated.projectId}`, await supabaseService.getTasksForProject(updated.projectId));
-        return updated;
-      }
-      throw new Error('Task not found');
-    }
     
     let taskIndex = TASKS.findIndex(t => t.id === taskId);
     if (taskIndex === -1) throw new Error('Task not found');
@@ -1071,7 +982,9 @@ export const enhancedApi = {
     const oldColumnTasks = TASKS.filter(t => t.projectId === projectId && t.status === oldStatus).sort((a, b) => a.order - b.order);
     oldColumnTasks.forEach((t, i) => t.order = i);
 
-    const newColumnTasks = TASKS.filter(t => t.projectId === projectId && t.status === newStatus).sort((a, b) => a.order - b.order);
+    // Exclude the moved task: its status is already newStatus, so it would otherwise be listed
+    // twice and the renumbering would leave it at the bottom of the column.
+    const newColumnTasks = TASKS.filter(t => t.projectId === projectId && t.status === newStatus && t.id !== taskId).sort((a, b) => a.order - b.order);
     newColumnTasks.splice(newOrder, 0, task);
     newColumnTasks.forEach((t, i) => t.order = i);
     
@@ -1097,10 +1010,6 @@ export const enhancedApi = {
       createdAt: new Date()
     };
     
-    if (isSupabaseAvailable && (supabaseService as any).createTimeEntry) {
-      return await (supabaseService as any).createTimeEntry(newEntry);
-    }
-    
     TIME_ENTRIES.push(newEntry);
     
     // Update task time tracked
@@ -1114,9 +1023,6 @@ export const enhancedApi = {
 
   getTimeEntriesForTask: async (taskId: string): Promise<TimeEntry[]> => {
     await networkDelay(200);
-    if (isSupabaseAvailable && (supabaseService as any).getTimeEntriesForTask) {
-      return await (supabaseService as any).getTimeEntriesForTask(taskId);
-    }
     return TIME_ENTRIES.filter(e => e.taskId === taskId);
   },
 
@@ -1166,9 +1072,6 @@ export const enhancedApi = {
   // Milestones
   getMilestonesForProject: async (projectId: string): Promise<Milestone[]> => {
     await networkDelay(300);
-    if (isSupabaseAvailable && (supabaseService as any).getMilestonesForProject) {
-      return await (supabaseService as any).getMilestonesForProject(projectId);
-    }
     return MILESTONES.filter(m => m.projectId === projectId);
   },
 
@@ -1186,10 +1089,6 @@ export const enhancedApi = {
       createdAt: new Date()
     };
     
-    if (isSupabaseAvailable && (supabaseService as any).createMilestone) {
-      return await (supabaseService as any).createMilestone(newMilestone);
-    }
-    
     MILESTONES.push(newMilestone);
     return newMilestone;
   },
@@ -1197,9 +1096,6 @@ export const enhancedApi = {
   // Portfolios
   getPortfolios: async (): Promise<Portfolio[]> => {
     await networkDelay(300);
-    if (isSupabaseAvailable && (supabaseService as any).getPortfolios) {
-      return await (supabaseService as any).getPortfolios();
-    }
     return [...PORTFOLIOS];
   },
 
@@ -1215,10 +1111,6 @@ export const enhancedApi = {
       status: 'active',
       createdAt: new Date()
     };
-    
-    if (isSupabaseAvailable && (supabaseService as any).createPortfolio) {
-      return await (supabaseService as any).createPortfolio(newPortfolio);
-    }
     
     PORTFOLIOS.push(newPortfolio);
     return newPortfolio;
@@ -1254,9 +1146,6 @@ export const enhancedApi = {
   // Goals
   getGoals: async (): Promise<Goal[]> => {
     await networkDelay(300);
-    if (isSupabaseAvailable && (supabaseService as any).getGoals) {
-      return await (supabaseService as any).getGoals();
-    }
     return [...GOALS];
   },
 
@@ -1275,10 +1164,6 @@ export const enhancedApi = {
       createdAt: new Date(),
       updatedAt: new Date()
     };
-    
-    if (isSupabaseAvailable && (supabaseService as any).createGoal) {
-      return await (supabaseService as any).createGoal(newGoal);
-    }
     
     GOALS.push(newGoal);
     return newGoal;
@@ -1316,9 +1201,6 @@ export const enhancedApi = {
   // Comments
   getCommentsForTask: async (taskId: string): Promise<Comment[]> => {
     await networkDelay(300);
-    if (isSupabaseAvailable && (supabaseService as any).getCommentsForTask) {
-      return await (supabaseService as any).getCommentsForTask(taskId);
-    }
     return COMMENTS.filter(c => c.taskId === taskId).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   },
 
@@ -1338,15 +1220,6 @@ export const enhancedApi = {
     const task = TASKS.find(t => t.id === taskId);
     const project = task ? PROJECTS.find(p => p.id === task.projectId) : undefined;
 
-    if (isSupabaseAvailable && (supabaseService as any).addComment) {
-      const created = await (supabaseService as any).addComment(newComment);
-      notify(`comments:${taskId}`, await (supabaseService as any).getCommentsForTask(taskId));
-      if (task) {
-        notificationService.notifyCommentAdded(created, task, author, USERS, project);
-      }
-      return created;
-    }
-    
     COMMENTS.push(newComment);
     notify(`comments:${taskId}`, COMMENTS.filter(c => c.taskId === taskId).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()));
     
@@ -1493,7 +1366,7 @@ export const enhancedApi = {
           isCompleted: false
         })),
         timeTracked: 0,
-        estimatedTime: sample.estimatedHours ? sample.estimatedHours * 60 : 120,
+        estimatedTime: sample.estimatedHours ? Math.round(sample.estimatedHours * 60) : 120, // whole minutes: INTEGER column
         customFields: {},
         tags: sample.tags || [],
         attachments: [],
@@ -1702,6 +1575,8 @@ export const enhancedApi = {
     return notificationService.simulateLiveNotification(user, type, TASKS, USERS);
   }
 };
+
+export const enhancedApi = withApiSync(localApi, sync);
 
 // Maintain backward compatibility with existing mockApi
 export const mockApi = enhancedApi;

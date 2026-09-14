@@ -5,7 +5,7 @@ export default defineConfig({
     environment: 'node',
     include: ['server/**/*.test.ts', 'services/**/*.test.ts'],
     coverage: {
-      include: ['server/**/*.ts', 'services/apiClient.ts'],
+      include: ['server/**/*.ts', 'services/apiClient.ts', 'services/apiSync.ts'],
       exclude: ['server/index.ts'],
       thresholds: { lines: 80 },
     },

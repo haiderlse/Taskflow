@@ -165,6 +165,71 @@ describe('enhancedApi backed by the local API', () => {
   });
 });
 
+describe('enhancedApi when saves fail', () => {
+  const dbTaskCount = () => (live.db.prepare('SELECT COUNT(*) AS n FROM tasks').get() as { n: number }).n;
+
+  // Forwards to the live API, except for requests matching `fail`, which reject like a dropped connection.
+  const failWhen = (fail: (path: string, init?: RequestInit) => boolean) => {
+    const forward = globalThis.fetch;
+    vi.stubGlobal('fetch', (path: string, init?: RequestInit) =>
+      fail(path, init) ? Promise.reject(new TypeError('fetch failed')) : forward(path, init));
+  };
+
+  it('keeps serving reads while the API is unreachable, and rejects edits it cannot save', async () => {
+    const { api } = await loadFacade();
+    const title = (await api.getTaskById('task-1'))!.title;
+    failWhen(() => true);
+
+    await expect(api.updateTask('task-1', { title: 'Lost' })).rejects.toThrow(/fetch failed/);
+    expect(await api.getTasks()).toHaveLength(8);
+    expect((await api.getTaskById('task-1'))?.title).toBe(title);
+  });
+
+  it('does not duplicate a task when a create that failed on the network is retried', async () => {
+    const { api } = await loadFacade();
+    await api.getTasks(); // load first, so only the create fails
+    let failNextPost = true;
+    failWhen((_path, init) => {
+      if (!failNextPost || init?.method !== 'POST') return false;
+      failNextPost = false;
+      return true;
+    });
+
+    await expect(api.createTask('Quarterly report', 'proj-1', 'To Do', { createdBy: 'user-1' })).rejects.toThrow(/fetch failed/);
+    await api.createTask('Quarterly report', 'proj-1', 'To Do', { createdBy: 'user-1' });
+
+    const copies = (await (await reload()).getTasks()).filter((t) => t.title === 'Quarterly report');
+    expect(copies).toHaveLength(1);
+  });
+
+  it('leaves nothing behind when a template project cannot be saved', async () => {
+    const { api } = await loadFacade();
+    const template = (await api.getTemplates())[0];
+    failWhen((path, init) => init?.method === 'POST' && path === '/api/projects');
+
+    await expect(api.createProjectFromTemplate(template.id, 'Doomed', 'user-1')).rejects.toThrow(/fetch failed/);
+
+    expect((await api.getProjects()).some((p) => p.name === 'Doomed')).toBe(false);
+    expect(await api.getTasks()).toHaveLength(8);
+    expect(dbTaskCount()).toBe(8);
+  });
+
+  it('creates two template projects at once without mixing their tasks', async () => {
+    const { api } = await loadFacade();
+    const template = (await api.getTemplates())[0];
+
+    const [alpha, beta] = await Promise.all([
+      api.createProjectFromTemplate(template.id, 'Alpha', 'user-1'),
+      api.createProjectFromTemplate(template.id, 'Beta', 'user-1'),
+    ]);
+
+    const reloaded = await reload();
+    expect(alpha.id).not.toBe(beta.id);
+    expect(await reloaded.getTasksForProject(alpha.id)).toHaveLength(template.sampleTasks.length);
+    expect(await reloaded.getTasksForProject(beta.id)).toHaveLength(template.sampleTasks.length);
+  });
+});
+
 describe('enhancedApi without the local API', () => {
   it('falls back to the in-memory demo data', async () => {
     vi.stubGlobal('fetch', async () => { throw new TypeError('fetch failed'); });

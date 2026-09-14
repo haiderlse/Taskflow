@@ -565,7 +565,7 @@ const localApi = {
     await networkDelay(300);
     
     const newUser: User = {
-      uid: userData.uid || `user-${Date.now()}`,
+      uid: userData.uid || `user-${crypto.randomUUID()}`,
       email: userData.email || '',
       displayName: userData.displayName || '',
       role: userData.role || 'member',
@@ -637,7 +637,7 @@ const localApi = {
     
     const colors = ['bg-green-500', 'bg-pink-500', 'bg-purple-500', 'bg-yellow-500', 'bg-blue-500', 'bg-indigo-500'];
     const newProject: Project = {
-      id: projectData.id || `proj-${Date.now()}`,
+      id: projectData.id || `proj-${crypto.randomUUID()}`,
       name: projectData.name || 'New Project',
       description: projectData.description || '',
       ownerId: projectData.ownerId || 'user-1',
@@ -727,7 +727,7 @@ const localApi = {
     const order = TASKS.filter(t => t.projectId === effectiveProjectId && t.status === effectiveStatus).length;
 
     const newTask: Task = {
-      id: taskData.id || `task-${Date.now()}`,
+      id: taskData.id || `task-${crypto.randomUUID()}`,
       projectId: effectiveProjectId,
       sectionId: taskData.sectionId,
       title: taskData.title || 'Untitled Task',
@@ -758,9 +758,12 @@ const localApi = {
       updatedAt: taskData.updatedAt || new Date(),
     };
     
+    const localId = newTask.id;
     TASKS.push(newTask);
-    // Save now so listeners and the assignment notification see the server-assigned id.
-    await sync.persist();
+    // Save now so listeners and the assignment notification see the server-assigned id. A failed
+    // save has already removed the task again, so report that rather than notify about it.
+    await sync.persist().catch(() => undefined);
+    if (!TASKS.includes(newTask)) throw sync.failureFor('task', localId);
     notify(`tasks:${effectiveProjectId}`, TASKS.filter(t => t.projectId === effectiveProjectId));
 
     if (newTask.assigneeId) {
@@ -1292,7 +1295,9 @@ const localApi = {
     await networkDelay(400);
     const template = ASANA_TEMPLATES.find(t => t.id === templateId) || ASANA_TEMPLATES[0];
     
-    const newProjectId = `proj-${Date.now()}`;
+    // Unique even when two projects are created in the same millisecond: the sync rewrites every
+    // reference to this id once the server assigns one, so a shared local id would merge them.
+    const newProjectId = `proj-${crypto.randomUUID()}`;
     const sections: ProjectSection[] = template.sections.map((s, idx) => ({
       id: `sec-${Date.now()}-${idx}`,
       name: s.name,
@@ -1341,7 +1346,7 @@ const localApi = {
       const startDate = new Date();
 
       const newTask: Task = {
-        id: `task-${Date.now()}-${i}`,
+        id: `task-${crypto.randomUUID()}`,
         projectId: newProjectId,
         sectionId: section?.id,
         title: sample.title,

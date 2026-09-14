@@ -1339,14 +1339,34 @@ git commit -m "feat: add browser API client and Vite dev proxy"
 
 ---
 
-### Task 9: Swap the facade's Supabase branches
+### Task 9: Persist the facade through the local API
+
+> **Implemented in `9d94f24` as a write-through cache, chosen over the rename sketched in Steps 1-4.** Renaming the Supabase call sites would still have lost most edits on reload. Sections, briefs, status updates, dependencies, drag-reorder, timer totals and template projects only ever changed the in-memory arrays, and those code paths could not find records created through the API. Steps 1-4 are kept for history; **Design** below and the code are authoritative. The browser check from Step 7 moves to Task 10, because the login screen blocks the app until then.
 
 **Files:**
-- Modify: `services/enhancedApi.ts` (17 renamed call sites, 2 `as any` call sites, and the in-memory lookups listed in Step 4)
+- Create: `services/apiSync.ts`, `services/__tests__/apiSync.test.ts`, `services/__tests__/enhancedApi.test.ts`, `services/__tests__/support/liveApi.ts`
+- Modify: `services/enhancedApi.ts` (remove all 27 Supabase branches and `initializeDatabase`, export through `withApiSync`), `vitest.config.ts`
 
 **Interfaces:**
 - Consumes: `apiClient` (Task 8)
-- Produces: `enhancedApi` with identical exported signatures — no consumer changes.
+- Produces: `enhancedApi` with identical exported signatures — no consumer changes; `mockApi.ts` is untouched.
+
+**Design:**
+- **Loading.** `createApiSync(store).ensureApi()` loads users, projects and tasks from the API once. It replaces the arrays in place, and only after every request has succeeded. If the API is unreachable, the demo data stays for the session.
+- **Saving.** `persist()` compares the arrays with the last server-confirmed copy of each record and sends only the differences, one save at a time:
+  - POST for new records, then every reference to the local id is rewritten. For projects: a task's `projectId` and `projectIds`, and status-update `projectId`. For tasks: `blockedBy`, `dependencies`, `blocking`, `subtasks`, `parentTaskId` and `activities[].taskId`. Creates and updates run users, then projects, then tasks; deletes run in reverse.
+  - PATCH with only the changed fields; a cleared field is sent as `null`.
+  - DELETE for removed records; for users, a deactivate.
+- **Conflicts and failures.**
+  - The server's value is adopted only for fields not edited again while the request was in flight.
+  - A 4xx rolls the change back and rejects the call. Network failures and 5xx are retried on the next save.
+  - `updatedAt` (and a user's `passwordHash`) is never compared, so saves cannot loop.
+- **Wiring.** `withApiSync(api, sync)` wraps each native `async` method: wait for the load, run the method, save. Synchronous methods such as subscriptions pass through.
+- **Facade changes.** In `enhancedApi.ts`:
+  - `networkDelay` is skipped while the API is live.
+  - `getCurrentUser` returns the API's current user.
+  - `createTask` saves before notifying, so the notification carries the server id.
+- **Bug fixed along the way.** `updateTaskOrder` listed the dragged task twice, which always left it at the bottom of the destination column.
 
 - [ ] **Step 1: Confirm the call sites before touching anything**
 
@@ -1435,7 +1455,7 @@ It needs no edit — but the references detach from their receiver, so
 class using `this` while making these edits.
 
 Run: `grep -n "enhancedApi\." services/mockApi.ts | wc -l`
-Expected: `20` — unchanged.
+Expected: `19` — unchanged. (This step originally said 20; the file has always had 19.)
 
 - [ ] **Step 6: Verify nothing references Supabase in this file**
 
@@ -1447,18 +1467,13 @@ Expected: `0` — the old flag and fire-and-forget probe are fully removed.
 
 - [ ] **Step 7: Run the app end to end**
 
-In one terminal: `npm run server` (API on `127.0.0.1:4100` unless `TASKFLOW_API_PORT` is set)
-In another: `npm run dev` (with the same `TASKFLOW_API_PORT`, if set)
-Open the URL Vite prints (`http://127.0.0.1:3000` by default; Vite moves to the next free port if 3000 is taken), then:
-- Confirm the "AOP 2025-26 Enterprise Plan" project renders.
-- Create a task, delete a different task, and add a section to a project you created.
-- **Reload the page and confirm all three changes are still there.** This is the whole point of the migration. If any change vanishes, that write path is still hitting the in-memory arrays.
+Moved to Task 10, Step 4. The login screen blocks the app until Task 10 removes it. Until then, `services/__tests__/enhancedApi.test.ts` covers the same reload persistence, using a fresh module import in place of a page reload.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add services/enhancedApi.ts
-git commit -m "feat: route enhancedApi through local API instead of Supabase"
+git add services/apiSync.ts services/enhancedApi.ts services/__tests__ vitest.config.ts
+git commit -m "feat: persist enhancedApi through the local API with a write-through cache"
 ```
 
 ---
@@ -1474,20 +1489,16 @@ git commit -m "feat: route enhancedApi through local API instead of Supabase"
 Replace the Supabase-and-fallback logic in `services/authService.ts` with a single-user session. Delete `login`, `register`, `hashPassword` and `verifyPassword` entirely:
 
 ```ts
-import { apiClient } from './apiClient';
+import { enhancedApi } from './enhancedApi';
 import type { User } from '../types';
 
 export class AuthService {
   private static currentUser: User | null = null;
 
-  // No authentication: the API always returns the seeded single user.
+  // No authentication. The facade waits for the API to load and returns its current user,
+  // or the demo user when the API is not running, so this never reads a second copy.
   static async getCurrentUser(): Promise<User> {
-    if (!this.currentUser) {
-      // apiClient returns null on 404 and throws if the API is unreachable.
-      const user = await apiClient.getCurrentUser();
-      if (!user) throw new Error('No current user: is the API running (npm run server) and seeded?');
-      this.currentUser = user;
-    }
+    this.currentUser ??= await enhancedApi.getCurrentUser();
     return this.currentUser;
   }
 
@@ -1514,7 +1525,15 @@ Dead code that reads like working authentication is a trap for the next reader; 
 Run: `npm run lint`
 Expected: no unresolved references to `AuthPage`, `login`, or `register`.
 
-Then reload the app: it should go straight to the board with no login screen.
+Then run the app end to end (moved here from Task 9, Step 7).
+
+In one terminal: `npm run server` (API on `127.0.0.1:4100` unless `TASKFLOW_API_PORT` is set)
+In another: `npm run dev` (with the same `TASKFLOW_API_PORT`, if set)
+Open the URL Vite prints (`http://127.0.0.1:3000` by default; Vite moves to the next free port if 3000 is taken), then:
+- Confirm the app goes straight to the board with no login screen, and that the "AOP 2025-26 Enterprise Plan" project renders.
+- Create a task, delete a different task, drag a task to another column, and add a section to a project you created.
+- **Reload the page and confirm all four changes are still there.** If any change vanishes, that write path is not reaching the API.
+- Stop `npm run server`, reload, and confirm the app still opens, on the demo data.
 
 - [ ] **Step 5: Commit**
 

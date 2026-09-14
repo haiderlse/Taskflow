@@ -202,7 +202,7 @@ deleted only when that domain's routes land.
 - **Phase 4 — removal.** Delete `supabaseService.ts` and `components/AuthPage.tsx`,
   drop `@supabase/supabase-js`, strip login/register from `authService.ts`,
   remove the `AuthPage` gate at `App.tsx:383-384`, replace the Supabase env vars
-  in `.env.example` with `VITE_API_URL`, and delete the RLS-bearing
+  in `.env.example` with `TASKFLOW_API_PORT` and `DB_PATH`, and delete the RLS-bearing
   `supabase-schema.sql` (superseded by `server/db/schema.sql`).
 
 ## Testing

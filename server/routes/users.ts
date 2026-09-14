@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { rowToEntity, entityToRow, USER_SPEC } from '../db/mappers';
 import { assertValidColumns, getTableColumns, quoteIdent } from '../db/sql';
 import type { User } from '../../types';
+import { listTasksBy } from './tasks';
 
 export function usersRouter(db: Database.Database) {
   const r = Router();
@@ -25,6 +26,8 @@ export function usersRouter(db: Database.Database) {
     if (!row) return res.status(404).json({ error: 'no seeded user' });
     res.json(rowToEntity<User>(row, USER_SPEC));
   });
+
+  r.get('/:uid/tasks', (req, res) => res.json(listTasksBy(db, 'assignee_id', req.params.uid)));
 
   r.get('/:uid', (req, res) => {
     const row = one(req.params.uid);

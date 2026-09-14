@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { rowToEntity, entityToRow, PROJECT_SPEC } from '../db/mappers';
 import { assertValidColumns, getTableColumns, quoteIdent } from '../db/sql';
 import type { Project } from '../../types';
+import { listTasksBy } from './tasks';
 
 export function projectsRouter(db: Database.Database) {
   const r = Router();
@@ -15,6 +16,8 @@ export function projectsRouter(db: Database.Database) {
     const rows = db.prepare('SELECT * FROM projects').all() as Record<string, unknown>[];
     res.json(rows.map((row) => rowToEntity<Project>(row, PROJECT_SPEC)));
   });
+
+  r.get('/:id/tasks', (req, res) => res.json(listTasksBy(db, 'project_id', req.params.id)));
 
   r.post('/', (req, res) => {
     const now = new Date().toISOString();

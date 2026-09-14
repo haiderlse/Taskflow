@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { rowToEntity, entityToRow, TASK_SPEC, USER_SPEC } from '../db/mappers';
+import { BadRequestError } from '../db/sql';
 
 describe('rowToEntity', () => {
   it('converts snake_case columns to camelCase keys', () => {
@@ -108,5 +109,36 @@ describe('entityToRow', () => {
     const row = entityToRow({ createdAt: 1738368000000 }, TASK_SPEC);
     expect(typeof row.created_at).toBe('string');
     expect(row.created_at).toBe('2025-02-01T00:00:00.000Z');
+  });
+});
+
+describe('entityToRow input validation', () => {
+  it('rejects snake_case keys that would bypass JSON and date encoding', () => {
+    expect(() => entityToRow({ custom_fields: 'nope' }, TASK_SPEC)).toThrow(BadRequestError);
+    expect(() => entityToRow({ due_date: 'garbage' }, TASK_SPEC)).toThrow(/due_date/);
+  });
+
+  it('rejects arrays and objects in scalar fields', () => {
+    expect(() => entityToRow({ sectionId: ['a', 'b'] }, TASK_SPEC)).toThrow(BadRequestError);
+    expect(() => entityToRow({ title: { a: 1 } }, TASK_SPEC)).toThrow(/title/);
+  });
+
+  it('rejects booleans in non-boolean fields', () => {
+    expect(() => entityToRow({ priority: true }, TASK_SPEC)).toThrow(/priority/);
+  });
+
+  it('rejects non-boolean values in boolean fields', () => {
+    expect(() => entityToRow({ isMilestone: 'false' }, TASK_SPEC)).toThrow(/isMilestone/);
+    expect(() => entityToRow({ isActive: 1 }, USER_SPEC)).toThrow(/isActive/);
+  });
+
+  it('rejects non-Date objects and arrays in date fields', () => {
+    expect(() => entityToRow({ dueDate: {} }, TASK_SPEC)).toThrow(/dueDate/);
+    expect(() => entityToRow({ dueDate: ['2026-09-01'] }, TASK_SPEC)).toThrow(/dueDate/);
+  });
+
+  it('still accepts null for scalar, boolean, date and JSON fields', () => {
+    expect(entityToRow({ sectionId: null, isMilestone: null, dueDate: null, approval: null }, TASK_SPEC))
+      .toEqual({ section_id: null, is_milestone: null, due_date: null, approval: null });
   });
 });

@@ -166,4 +166,109 @@ describe('tasks routes', () => {
     await request(app).delete(`/api/projects/${p.id}`);
     expect((await request(app).get(`/api/projects/${p.id}/tasks`)).body).toEqual([]);
   });
+
+  it('lists the current user\'s tasks via /me', async () => {
+    const me = await request(app).get('/api/users/me/tasks');
+    const byUid = await request(app).get('/api/users/user-1/tasks');
+    expect(me.status).toBe(200);
+    expect(me.body.length).toBeGreaterThan(0);
+    expect(me.body).toEqual(byUid.body);
+  });
+
+  it('advances updatedAt on patch even when the client sent an old one', async () => {
+    const { body } = await request(app).post('/api/tasks')
+      .send({ title: 'Stale', projectId, createdBy: 'user-1', updatedAt: '2020-01-01T00:00:00.000Z' });
+    const res = await request(app).patch(`/api/tasks/${body.id}`).send({ title: 'Fresh' });
+    expect(new Date(res.body.updatedAt).getFullYear()).toBeGreaterThan(2020);
+  });
+});
+
+describe('tasks routes reject malformed input with 400 and leave data intact', () => {
+  const listStillWorks = async () => {
+    expect((await request(app).get('/api/projects/proj-1/tasks')).status).toBe(200);
+    expect((await request(app).get('/api/users/user-1/tasks')).status).toBe(200);
+  };
+
+  it('rejects a snake_case key that would bypass JSON encoding', async () => {
+    const res = await request(app).patch('/api/tasks/task-1').send({ custom_fields: 'nope' });
+    expect(res.status).toBe(400);
+    await listStillWorks();
+  });
+
+  it('rejects a snake_case key that would override the server updatedAt', async () => {
+    const res = await request(app).patch('/api/tasks/task-1').send({ updated_at: 'client-garbage' });
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects arrays in scalar fields that would shift values into other columns', async () => {
+    const before = (await request(app).get('/api/projects/proj-1/tasks')).body.find((t: any) => t.id === 'task-1');
+    const res = await request(app)
+      .patch('/api/tasks/task-1')
+      .send({ sectionId: ['T', 'not json'], tags: ['a'], description: [] });
+    expect(res.status).toBe(400);
+    await listStillWorks();
+    const after = (await request(app).get('/api/projects/proj-1/tasks')).body.find((t: any) => t.id === 'task-1');
+    expect(after).toEqual(before);
+  });
+
+  it('rejects array smuggling on create', async () => {
+    const res = await request(app)
+      .post('/api/tasks')
+      .send({ title: ['T', 'proj-1'], projectId: [], createdBy: 'user-1' });
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects wrong-typed scalars with 400, not 500', async () => {
+    expect((await request(app).post('/api/tasks')
+      .send({ title: 'x', projectId, createdBy: 'user-1', priority: true })).status).toBe(400);
+    expect((await request(app).patch('/api/tasks/task-1').send({ title: { a: 1 } })).status).toBe(400);
+  });
+
+  it('rejects a non-integer order that would corrupt sorting', async () => {
+    const res = await request(app).patch('/api/tasks/task-1').send({ order: 'abc' });
+    expect(res.status).toBe(400);
+    const orders = (await request(app).get('/api/projects/proj-1/tasks')).body.map((t: any) => t.order);
+    expect(orders.every((o: unknown) => typeof o === 'number')).toBe(true);
+  });
+
+  it('rejects a non-boolean isMilestone instead of coercing it', async () => {
+    const res = await request(app).patch('/api/tasks/task-1').send({ isMilestone: 'false' });
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects null in a NOT NULL column and leaves the row unchanged', async () => {
+    const res = await request(app).patch('/api/tasks/task-1').send({ title: null });
+    expect(res.status).toBe(400);
+    const task1 = (await request(app).get('/api/projects/proj-1/tasks')).body.find((t: any) => t.id === 'task-1');
+    expect(task1.title).toBe('Follow up on Pharma Receivables Plan');
+  });
+
+  it('rejects a create missing title or projectId', async () => {
+    expect((await request(app).post('/api/tasks').send({ projectId, createdBy: 'user-1' })).status).toBe(400);
+    expect((await request(app).post('/api/tasks').send({ title: 'x', createdBy: 'user-1' })).status).toBe(400);
+  });
+
+  it('rejects a column-name injection attempt via POST', async () => {
+    const res = await request(app)
+      .post('/api/tasks')
+      .send({ title: 'x', projectId, createdBy: 'user-1', "title) VALUES ('pwned') -- ": 'y' });
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects a malformed JSON body with 400 and leaks no internals', async () => {
+    const res = await request(app)
+      .post('/api/tasks')
+      .set('Content-Type', 'application/json')
+      .send('{bad json');
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'invalid request body' });
+  });
+
+  it('rejects an oversized body with 413, not 500', async () => {
+    const res = await request(app)
+      .post('/api/tasks')
+      .send({ title: 'x', projectId, createdBy: 'user-1', description: 'a'.repeat(6 * 1024 * 1024) });
+    expect(res.status).toBe(413);
+    expect(res.body).toEqual({ error: 'request body too large' });
+  });
 });

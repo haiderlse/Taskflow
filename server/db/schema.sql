@@ -11,8 +11,8 @@ CREATE TABLE IF NOT EXISTS users (
   last_login     TEXT,
   created_at     TEXT NOT NULL,
   manager_id     TEXT,
-  approval_limit INTEGER
-);
+  approval_limit REAL
+) STRICT;
 
 CREATE TABLE IF NOT EXISTS projects (
   id             TEXT PRIMARY KEY,
@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS projects (
   custom_fields  TEXT NOT NULL DEFAULT '[]',
   tags           TEXT NOT NULL DEFAULT '[]',
   portfolio_id   TEXT
-);
+) STRICT;
 
 CREATE TABLE IF NOT EXISTS tasks (
   id              TEXT PRIMARY KEY,
@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   subtask_items   TEXT NOT NULL DEFAULT '[]',
   recurrence      TEXT,
   activities      TEXT NOT NULL DEFAULT '[]'
-);
+) STRICT;
 
 CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_assignee ON tasks(assignee_id);

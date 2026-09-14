@@ -52,6 +52,17 @@ describe('users routes', () => {
     expect(res.body.displayName).toBe('Charlie');
   });
 
+  it('accepts a decimal approvalLimit, matching the old DECIMAL(15,2) column', async () => {
+    const res = await request(app).patch('/api/users/user-2').send({ approvalLimit: 1500.5 });
+    expect(res.status).toBe(200);
+    expect(res.body.approvalLimit).toBe(1500.5);
+  });
+
+  it('rejects a non-numeric workload under the STRICT schema', async () => {
+    const res = await request(app).patch('/api/users/user-3').send({ workload: 'lots' });
+    expect(res.status).toBe(400);
+  });
+
   it('patches with an empty body and changes nothing', async () => {
     const before = await request(app).get('/api/users/user-3');
     const res = await request(app).patch('/api/users/user-3').send({});

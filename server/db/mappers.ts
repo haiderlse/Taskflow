@@ -39,6 +39,37 @@ export function rowToEntity<T>(row: Record<string, unknown>, spec: FieldSpec): T
   return out as T;
 }
 
+function toIsoDate(key: string, val: unknown): string {
+  // Handle Date objects directly
+  if (val instanceof Date) {
+    if (Number.isNaN(val.getTime())) {
+      throw new BadRequestError(`${key}: invalid Date object`);
+    }
+    return val.toISOString();
+  }
+  if (typeof val === 'number') {
+    // Handle numeric epoch-millis timestamp
+    const date = new Date(val);
+    if (Number.isNaN(date.getTime())) {
+      throw new BadRequestError(`${key}: unparseable timestamp ${val}`);
+    }
+    return date.toISOString();
+  }
+  if (typeof val !== 'string') {
+    throw new BadRequestError(`${key}: must be an ISO 8601 string, epoch millis or Date`);
+  }
+  // Detect naive datetime: has time component but no timezone designator
+  // Regex allows: Z, [+-]HH:MM, or [+-]HHMM (basic format)
+  if (val.match(/\d{2}:\d{2}/) && !val.match(/(?:Z|[+-]\d{2}:?\d{2})$/i)) {
+    throw new BadRequestError(`${key}: naive datetime "${val}" lacks timezone; must be ISO 8601 with explicit Z or offset`);
+  }
+  const date = new Date(val);
+  if (Number.isNaN(date.getTime())) {
+    throw new BadRequestError(`${key}: unparseable datetime "${val}"`);
+  }
+  return date.toISOString();
+}
+
 export function entityToRow(
   entity: Record<string, unknown>,
   spec: FieldSpec
@@ -46,39 +77,21 @@ export function entityToRow(
   const out: Record<string, unknown> = {};
   for (const [key, val] of Object.entries(entity)) {
     if (val === undefined) continue; // omit so PATCH only touches provided fields
+    // The JSON/date/bool specs are keyed by camelCase, so a snake_case key would
+    // reach a real column with its encoding (and validation) silently skipped.
+    if (key.includes('_')) throw new BadRequestError(`unknown field: ${key}`);
     const col = toSnake(key);
     if (val === null) { out[col] = null; }
     else if (spec.json.includes(key)) out[col] = JSON.stringify(val);
-    else if (spec.dates.includes(key)) {
-      // Handle Date objects directly
-      if (val instanceof Date) {
-        if (Number.isNaN(val.getTime())) {
-          throw new BadRequestError(`${key}: invalid Date object`);
-        }
-        out[col] = val.toISOString();
-      } else if (typeof val === 'number') {
-        // Handle numeric epoch-millis timestamp
-        const date = new Date(val);
-        if (Number.isNaN(date.getTime())) {
-          throw new BadRequestError(`${key}: unparseable timestamp ${val}`);
-        }
-        out[col] = date.toISOString();
-      } else {
-        const strVal = String(val);
-        // Detect naive datetime: has time component but no timezone designator
-        // Regex allows: Z, [+-]HH:MM, or [+-]HHMM (basic format)
-        if (strVal.match(/\d{2}:\d{2}/) && !strVal.match(/(?:Z|[+-]\d{2}:?\d{2})$/i)) {
-          throw new BadRequestError(`${key}: naive datetime "${strVal}" lacks timezone; must be ISO 8601 with explicit Z or offset`);
-        }
-        const date = new Date(strVal);
-        if (Number.isNaN(date.getTime())) {
-          throw new BadRequestError(`${key}: unparseable datetime "${strVal}"`);
-        }
-        out[col] = date.toISOString();
-      }
+    else if (spec.dates.includes(key)) out[col] = toIsoDate(key, val);
+    else if (spec.bools.includes(key)) {
+      if (typeof val !== 'boolean') throw new BadRequestError(`${key}: must be a boolean`);
+      out[col] = val ? 1 : 0;
     }
-    else if (spec.bools.includes(key)) out[col] = val ? 1 : 0;
-    else out[col] = val;
+    // better-sqlite3 spreads an array argument across the remaining placeholders and
+    // cannot bind booleans or objects, so plain columns accept only strings and numbers.
+    else if (typeof val === 'string' || typeof val === 'number') out[col] = val;
+    else throw new BadRequestError(`${key}: must be a string or number`);
   }
   return out;
 }

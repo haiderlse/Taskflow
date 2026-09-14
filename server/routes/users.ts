@@ -6,6 +6,9 @@ import { assertValidColumns, getTableColumns, quoteIdent } from '../db/sql';
 import type { User } from '../../types';
 import { listTasksBy } from './tasks';
 
+// There is no authentication: the seeded user-1 is always the current user.
+const CURRENT_USER_ID = 'user-1';
+
 export function usersRouter(db: Database.Database) {
   const r = Router();
   // Read once from the live schema at router construction time — this is
@@ -22,10 +25,13 @@ export function usersRouter(db: Database.Database) {
 
   // Must precede '/:uid' or 'me' is captured as a uid
   r.get('/me', (_req, res) => {
-    const row = one('user-1');
+    const row = one(CURRENT_USER_ID);
     if (!row) return res.status(404).json({ error: 'no seeded user' });
     res.json(rowToEntity<User>(row, USER_SPEC));
   });
+
+  // Must precede '/:uid/tasks' for the same reason
+  r.get('/me/tasks', (_req, res) => res.json(listTasksBy(db, 'assignee_id', CURRENT_USER_ID)));
 
   r.get('/:uid/tasks', (req, res) => res.json(listTasksBy(db, 'assignee_id', req.params.uid)));
 

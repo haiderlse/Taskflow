@@ -14,6 +14,12 @@ const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
     res.status(400).json({ error: err.message });
     return;
   }
+  // express.json() rejections (malformed JSON, oversized body) carry a 4xx status.
+  const status = (err as { status?: unknown } | null | undefined)?.status;
+  if (typeof status === 'number' && status >= 400 && status < 500) {
+    res.status(status).json({ error: status === 413 ? 'request body too large' : 'invalid request body' });
+    return;
+  }
   const sqliteCode = (err as { code?: unknown } | null | undefined)?.code;
   if (typeof sqliteCode === 'string' && sqliteCode.startsWith('SQLITE_CONSTRAINT')) {
     console.error('Constraint violation:', err);

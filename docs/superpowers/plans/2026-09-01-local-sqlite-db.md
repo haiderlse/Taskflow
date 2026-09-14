@@ -1341,7 +1341,7 @@ git commit -m "feat: add browser API client and Vite dev proxy"
 
 ### Task 9: Persist the facade through the local API
 
-> **Implemented in `9d94f24` as a write-through cache, chosen over the rename sketched in Steps 1-4.** Renaming the Supabase call sites would still have lost most edits on reload. Sections, briefs, status updates, dependencies, drag-reorder, timer totals and template projects only ever changed the in-memory arrays, and those code paths could not find records created through the API. Steps 1-4 are kept for history; **Design** below and the code are authoritative. The browser check from Step 7 moves to Task 10, because the login screen blocks the app until then.
+> **Implemented in `9d94f24` as a write-through cache, then revised after code review, chosen over the rename sketched in Steps 1-4.** Renaming the Supabase call sites would still have lost most edits on reload. Sections, briefs, status updates, dependencies, drag-reorder, timer totals and template projects only ever changed the in-memory arrays, and those code paths could not find records created through the API. Steps 1-4 are kept for history; **Design** below and the code are authoritative. The browser check from Step 7 moves to Task 10, because the login screen blocks the app until then.
 
 **Files:**
 - Create: `services/apiSync.ts`, `services/__tests__/apiSync.test.ts`, `services/__tests__/enhancedApi.test.ts`, `services/__tests__/support/liveApi.ts`
@@ -1352,20 +1352,25 @@ git commit -m "feat: add browser API client and Vite dev proxy"
 - Produces: `enhancedApi` with identical exported signatures — no consumer changes; `mockApi.ts` is untouched.
 
 **Design:**
-- **Loading.** `createApiSync(store).ensureApi()` loads users, projects and tasks from the API once. It replaces the arrays in place, and only after every request has succeeded. If the API is unreachable, the demo data stays for the session.
+- **Loading.** `createApiSync(store).ensureApi()` loads users, projects and tasks from the API. It replaces the arrays in place, and only after every request has succeeded. If the API is unreachable, the facade uses the demo data and retries the load on a later call once 5 seconds have passed.
 - **Saving.** `persist()` compares the arrays with the last server-confirmed copy of each record and sends only the differences, one save at a time:
-  - POST for new records, then every reference to the local id is rewritten. For projects: a task's `projectId` and `projectIds`, and status-update `projectId`. For tasks: `blockedBy`, `dependencies`, `blocking`, `subtasks`, `parentTaskId` and `activities[].taskId`. Creates and updates run users, then projects, then tasks; deletes run in reverse.
+  - POST for new records, then every reference to the local id is rewritten. For projects: a task's `projectId` and `projectIds`, and status-update `projectId`. For tasks: `blockedBy`, `dependencies`, `blocking`, `subtasks`, `parentTaskId` and `activities[].taskId`. For users: a task's `assigneeId`, `createdBy` and `collaboratorIds`, a project's `ownerId` and `members`, and a user's `managerId`. Creates and updates run users, then projects, then tasks; deletes run in reverse.
   - PATCH with only the changed fields; a cleared field is sent as `null`.
   - DELETE for removed records; for users, a deactivate.
 - **Conflicts and failures.**
+  - Every step looks records up by id, because the facade replaces objects as well as mutating them.
   - The server's value is adopted only for fields not edited again while the request was in flight.
-  - A 4xx rolls the change back and rejects the call. Network failures and 5xx are retried on the next save.
+  - Any failed save (4xx, 5xx or network) is undone: a new record is removed, the fields sent are restored, a deleted record is put back. A call that rejects has changed nothing, so retrying it cannot create a duplicate.
   - `updatedAt` (and a user's `passwordHash`) is never compared, so saves cannot loop.
-- **Wiring.** `withApiSync(api, sync)` wraps each native `async` method: wait for the load, run the method, save. Synchronous methods such as subscriptions pass through.
+- **Wiring.** `withApiSync(api, sync)` wraps each native `async` method:
+  - `get*` methods only wait for the load. They never save, so a read cannot fail because of a save.
+  - Other methods wait for the load, run, then save. The wrapper snapshots the data before the call and rejects it only with failures on records and fields that call changed, so concurrent calls don't receive each other's errors.
+  - Synchronous methods such as subscriptions pass through.
 - **Facade changes.** In `enhancedApi.ts`:
   - `networkDelay` is skipped while the API is live.
   - `getCurrentUser` returns the API's current user.
-  - `createTask` saves before notifying, so the notification carries the server id.
+  - `createTask` saves before notifying, so the notification carries the server id, and rejects if that save fails.
+  - Local ids use `crypto.randomUUID()`. The sync rewrites every reference to a local id, so two records sharing one would be merged.
 - **Bug fixed along the way.** `updateTaskOrder` listed the dragged task twice, which always left it at the bottom of the destination column.
 
 - [ ] **Step 1: Confirm the call sites before touching anything**

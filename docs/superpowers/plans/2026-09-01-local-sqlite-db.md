@@ -12,7 +12,8 @@
 
 ## Global Constraints
 
-- API binds to `127.0.0.1` only, port `4000`. Never `0.0.0.0` — there is no auth.
+- API binds to `127.0.0.1` only. Never `0.0.0.0` — there is no auth. The port comes from `TASKFLOW_API_PORT` (default `4100`, because `4000` is taken by another local service), read through `server/config.ts` by both `server/index.ts` and the Vite proxy so the two can never disagree.
+- The Vite dev server also binds `127.0.0.1` and keeps its default Host check (no `allowedHosts: true`). It proxies `/api`, so anything that can reach Vite can use the API.
 - No authentication. `GET /api/users/me` always returns seeded `user-1`.
 - `types.ts` is the schema authority, NOT `supabase-schema.sql`.
 - Nested object fields are stored as JSON TEXT columns, not normalised tables.
@@ -1221,24 +1222,36 @@ git commit -m "feat: add tasks API routes with project and assignee listings"
 
 ### Task 8: Browser API client
 
+> **Implemented in `c63db72`.** The code below is the original sketch. `services/apiClient.ts`, `server/config.ts` and `vite.config.ts` are authoritative, and they differ as described under **Interfaces** and **Step 1**. Contract tests are in `services/__tests__/apiClient.test.ts`.
+
 **Files:**
 - Create: `services/apiClient.ts`
 - Modify: `vite.config.ts`
 
 **Interfaces:**
 - Consumes: the routes from Tasks 5-7
-- Produces: `apiClient` with exactly the 12 method names `supabaseService` exposed, so Task 9 is a mechanical rename:
-  `getUsers`, `getUserById`, `createUser`, `updateUser`, `deleteUser`, `getCurrentUser`, `getProjects`, `createProject`, `getTasksForProject`, `getTasksForUser`, `createTask`, `updateTask`.
+- Produces: `apiClient` with the 12 method names `supabaseService` exposed, plus `updateProject`, `deleteProject` and `deleteTask`. The facade reaches `updateProject` and `deleteTask` through `(supabaseService as any)`, so a plain rename would miss them:
+  `getUsers`, `getUserById`, `createUser`, `updateUser`, `deleteUser`, `getCurrentUser`, `getProjects`, `createProject`, `updateProject`, `deleteProject`, `getTasksForProject`, `getTasksForUser`, `createTask`, `updateTask`, `deleteTask`.
+- Contracts:
+  - `getUserById` and `getCurrentUser` return `null` on 404.
+  - Deletes return `false` when there was nothing to delete.
+  - `deleteUser` deactivates the user (`isActive: false`) and `getUsers` hides inactive users, as `supabaseService` did. A hard delete fails for any project owner.
+  - `createProject(name, ownerId, extra?)` sends the facade-built fields; the server still assigns the id.
+  - `passwordHash` is never sent.
 
 - [ ] **Step 1: Add the dev proxy**
 
 In `vite.config.ts`, inside `server`, add:
 
 ```ts
-proxy: { '/api': { target: 'http://127.0.0.1:4000', changeOrigin: true } },
+proxy: { '/api': { target: `http://${API_HOST}:${apiPort(process.env)}`, changeOrigin: true } },
 ```
 
-Leave `host: '0.0.0.0'` as-is — the UI stays LAN-reachable, but the API itself never binds beyond loopback.
+Also set `host: '127.0.0.1'` and remove `allowedHosts: true`:
+- With the proxy in place, a LAN-reachable Vite server would expose the unauthenticated API to the network.
+- `allowedHosts: true` would let other websites reach the API through DNS rebinding.
+
+`API_HOST` and `apiPort` come from `server/config.ts`. Read `process.env` rather than `loadEnv`'s `.env` values, because `server/index.ts` only sees the shell environment.
 
 - [ ] **Step 2: Write the client**
 
@@ -1329,7 +1342,7 @@ git commit -m "feat: add browser API client and Vite dev proxy"
 ### Task 9: Swap the facade's Supabase branches
 
 **Files:**
-- Modify: `services/enhancedApi.ts` (17 call sites)
+- Modify: `services/enhancedApi.ts` (17 renamed call sites, 2 `as any` call sites, and the in-memory lookups listed in Step 4)
 
 **Interfaces:**
 - Consumes: `apiClient` (Task 8)
@@ -1339,6 +1352,9 @@ git commit -m "feat: add browser API client and Vite dev proxy"
 
 Run: `grep -n "supabaseService\.\|isSupabaseAvailable" services/enhancedApi.ts`
 Expected: 17 `supabaseService.*` references plus the `isSupabaseAvailable` flag.
+
+Run: `grep -n "supabaseService as any" services/enhancedApi.ts`
+Expected: 2 — `updateProject` (~line 717) and `deleteTask` (~line 865). The first grep does not match these.
 
 - [ ] **Step 2: Replace the import**
 
@@ -1401,6 +1417,15 @@ already inside `async` functions, so `await` is legal at each one.
 
 Apply to all 17 sites. `getCurrentUser`, `getUsers` (x2), `getUserById`, `createUser`, `updateUser`, `deleteUser`, `getProjects` (x2), `createProject`, `getTasksForProject` (x4), `getTasksForUser`, `createTask`, `updateTask`.
 
+A plain rename is not enough for the following. Each was confirmed by the Task 8 code review against the real API:
+
+- **The `as any` call sites.** Replace `(supabaseService as any).updateProject?.(...)` and `(supabaseService as any).deleteTask?.(...)` with direct `apiClient.updateProject(...)` and `apiClient.deleteTask(...)` calls. `?.` on a missing method silently does nothing.
+- **`deleteProject` has no backend call.** Add an `apiClient.deleteProject` branch.
+- **In-memory lookups before the API.** `updateProject`, `deleteProject`, `deleteTask` and `deleteUser` look the record up in the in-memory arrays before calling any backend. Records created through the API have server UUIDs, so those lookups throw (`'Project not found'`) or return `false`. When `await ensureApi()` is true, go to the API first. The dependency helpers around lines 1010-1057 have the same `TASKS.find` problem. Real consumer: adding a section at `KanbanBoard.tsx:144`.
+- **`createProject`.** Pass the project the facade builds: `apiClient.createProject(newProject.name, newProject.ownerId, newProject)`. Otherwise its sections, colour and members are dropped.
+- **`createTask`.** Use the task the API returns, which has the server id, for the assignment notification (~line 835), not the locally built `newTask`.
+- **`getCurrentUser`.** `apiClient.getCurrentUser()` returns `User | null`; keep the existing `user || USERS[0]` fallback.
+
 - [ ] **Step 5: Confirm the mockApi shim still binds correctly**
 
 `services/mockApi.ts` re-exports `enhancedApi` methods by reference
@@ -1422,12 +1447,12 @@ Expected: `0` — the old flag and fire-and-forget probe are fully removed.
 
 - [ ] **Step 7: Run the app end to end**
 
-In one terminal: `npm run server`
-In another: `npm run dev`
-Open `http://localhost:3000`, then:
+In one terminal: `npm run server` (API on `127.0.0.1:4100` unless `TASKFLOW_API_PORT` is set)
+In another: `npm run dev` (with the same `TASKFLOW_API_PORT`, if set)
+Open the URL Vite prints (`http://127.0.0.1:3000` by default; Vite moves to the next free port if 3000 is taken), then:
 - Confirm the "AOP 2025-26 Enterprise Plan" project renders.
-- Create a task.
-- **Reload the page and confirm the task is still there.** This is the whole point of the migration; if it vanishes, the write path is still hitting the in-memory arrays.
+- Create a task, delete a different task, and add a section to a project you created.
+- **Reload the page and confirm all three changes are still there.** This is the whole point of the migration. If any change vanishes, that write path is still hitting the in-memory arrays.
 
 - [ ] **Step 8: Commit**
 
@@ -1458,7 +1483,10 @@ export class AuthService {
   // No authentication: the API always returns the seeded single user.
   static async getCurrentUser(): Promise<User> {
     if (!this.currentUser) {
-      this.currentUser = await apiClient.getCurrentUser();
+      // apiClient returns null on 404 and throws if the API is unreachable.
+      const user = await apiClient.getCurrentUser();
+      if (!user) throw new Error('No current user: is the API running (npm run server) and seeded?');
+      this.currentUser = user;
     }
     return this.currentUser;
   }
@@ -1522,8 +1550,10 @@ npm uninstall @supabase/supabase-js
 Overwrite `.env.example`:
 
 ```
-# Local API server (see npm run server)
-VITE_API_URL=/api
+# Local API server (see npm run server). Both values are read from the shell
+# environment, not loaded from a .env file: export them, or prefix the command.
+# Set TASKFLOW_API_PORT the same way for `npm run dev`, so the /api proxy matches.
+TASKFLOW_API_PORT=4100
 DB_PATH=data/taskflow.db
 ```
 
@@ -1535,8 +1565,8 @@ Replace any Supabase setup instructions with:
 ## Running locally
 
     npm install
-    npm run server   # API on http://127.0.0.1:4000
-    npm run dev      # UI on http://localhost:3000
+    npm run server   # API on http://127.0.0.1:4100 (override with TASKFLOW_API_PORT)
+    npm run dev      # UI on http://127.0.0.1:3000 (local machine only)
 
 Data is stored in `data/taskflow.db` (SQLite). To reset, delete that file —
 it is re-seeded with demo data on next start. There is no authentication;

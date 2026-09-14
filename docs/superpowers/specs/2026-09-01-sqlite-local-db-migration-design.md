@@ -73,17 +73,19 @@ No websockets are required.
    recoverable from git history. A "switch user" control is a plausible later
    addition but is out of scope.
 3. **The API binds to `127.0.0.1` only.** With auth removed there is nothing
-   guarding the API. Note `vite.config.ts:7` sets `host: '0.0.0.0'` with
-   `allowedHosts: true`, so the UI is already LAN-reachable; the API must not
-   follow it.
+   guarding the API. `vite.config.ts` originally set `host: '0.0.0.0'` with
+   `allowedHosts: true`. Once Vite proxies `/api`, that would expose the API
+   to the LAN, and to other websites through DNS rebinding. So the dev server
+   also binds `127.0.0.1` and keeps Vite's default Host check (decided during
+   Task 8).
 4. **RLS is deleted, not ported.** ~95 lines of policy in `supabase-schema.sql`
    exist to scope rows per authenticated user. With no auth there is no
    principal to scope against.
 
 ### Known accepted risk
 
-Removing auth means any process that can reach `127.0.0.1:4000` has full
-read/write access to all data. Accepted because this is a single-user local
+Removing auth means any local process that can reach the API port (or the Vite
+dev server that proxies it) has full read/write access to all data. Accepted because this is a single-user local
 tool. **Adding a second user or exposing the API beyond loopback requires
 revisiting decision 2 first** — the existing `authService` credential handling
 is not safe to expose (see Appendix).
@@ -106,7 +108,10 @@ browser (React SPA)
        data/taskflow.db             SQLite file, gitignored
 ```
 
-Vite dev-proxies `/api` to `127.0.0.1:4000` so the browser sees same-origin.
+Vite dev-proxies `/api` to the API so the browser sees same-origin. The port
+comes from `TASKFLOW_API_PORT` (default `4100`, because `4000` is taken by another
+local service). `server/config.ts` reads it for both the server and the proxy, so
+they cannot drift apart and send writes to whatever else owns a port.
 
 **Stack:** Express + `better-sqlite3`. `better-sqlite3` is synchronous —
 no pool, no async ceremony — which is correct for a single-user local file.

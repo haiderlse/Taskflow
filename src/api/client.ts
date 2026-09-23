@@ -10,9 +10,10 @@ export class ApiError extends Error {
     readonly status: number,
     readonly code: ErrorCode | 'NETWORK',
     message: string,
-    readonly details?: unknown
+    readonly details?: unknown,
+    cause?: unknown
   ) {
-    super(message);
+    super(message, { cause });
     this.name = 'ApiError';
   }
 }
@@ -35,7 +36,7 @@ async function call<T>(method: Method, path: string, body?: unknown): Promise<T>
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch (cause) {
-    throw new ApiError(0, 'NETWORK', 'The local API is not reachable', cause);
+    throw new ApiError(0, 'NETWORK', 'The local API is not reachable', undefined, cause);
   }
   const envelope = await readEnvelope<T>(res);
   if (envelope === null) throw new ApiError(res.status, 'INTERNAL', 'The API returned an unreadable response');

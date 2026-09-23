@@ -41,12 +41,13 @@ describe('api', () => {
     expect(error).toMatchObject({ status: 409, code: 'WEEK_FULL', message: 'the week already has three outcomes', details: { outcomes: [] } });
   });
 
-  it('reports an unreachable API as a NETWORK error', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('fetch failed'); }));
+  it('reports an unreachable API as a NETWORK error, carrying the cause not the details', async () => {
+    const thrown = new TypeError('fetch failed');
+    vi.stubGlobal('fetch', vi.fn(async () => { throw thrown; }));
 
     const error = await api.get('/health').catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ApiError);
-    expect(error).toMatchObject({ status: 0, code: 'NETWORK' });
+    expect(error).toMatchObject({ status: 0, code: 'NETWORK', details: undefined, cause: thrown });
   });
 
   it('reports a response that is not the envelope as INTERNAL', async () => {

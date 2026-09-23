@@ -6,7 +6,6 @@ import { ToastProvider, useToast } from './utils/ux';
 import TopBar from './components/Header';
 import HomePage from './components/ProjectDashboard';
 import ProjectView from './components/KanbanBoard';
-import AuthPage from './components/AuthPage';
 import MyTasksPage from './components/MyTasksPage';
 import InboxPage from './components/InboxPage';
 import ReportingPage from './components/CorporateReportingPage';
@@ -243,7 +242,6 @@ const App: React.FC = () => {
   const [allTasks, setAllTasks] = useState<Task[]>([]);
   const [currentView, setCurrentView] = useState<ViewState>({ type: 'home' });
   const [loading, setLoading] = useState(true);
-  const [authLoading, setAuthLoading] = useState(false);
 
   // Modals
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -273,10 +271,8 @@ const App: React.FC = () => {
     const initializeApp = async () => {
       setLoading(true);
       try {
-        const sessionUser = await AuthService.checkSession();
-        if (sessionUser) {
-          setCurrentUser(sessionUser);
-        }
+        const user = await AuthService.getCurrentUser();
+        setCurrentUser(user);
         await loadData();
       } catch (error) {
         console.error("Failed to load initial data", error);
@@ -320,14 +316,6 @@ const App: React.FC = () => {
       reminderService.stop();
     };
   }, [currentUser, allTasks]);
-
-  const handleLogin = (user: User) => {
-    setAuthLoading(true);
-    setTimeout(() => {
-      setCurrentUser(user);
-      setAuthLoading(false);
-    }, 500);
-  };
 
   const handleLogout = async () => {
     try {
@@ -380,10 +368,6 @@ const App: React.FC = () => {
       );
     }
 
-    if (!currentUser) {
-      return <AuthPage users={users} onLogin={handleLogin} loading={authLoading} />;
-    }
-    
     const renderAppContent = () => {
       switch (currentView.type) {
         case 'home':

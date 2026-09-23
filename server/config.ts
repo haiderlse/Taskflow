@@ -22,3 +22,29 @@ export function apiPort(env: Record<string, string | undefined>): number {
 export function execDbPath(env: Record<string, string | undefined>): string {
   return env.EXEC_DB_PATH || 'data/execution.db';
 }
+
+const LOOPBACK = '127.0.0.1';
+const HOST_PATTERN = /^[A-Za-z0-9.\-:[\]]+$/;
+
+/**
+ * Where the Vite dev server listens. Loopback unless TASKFLOW_BIND names a
+ * tailnet address or hostname; the API never follows it (API_HOST is fixed).
+ */
+export function bindHost(env: Record<string, string | undefined>): string {
+  const raw = env.TASKFLOW_BIND;
+  if (raw === undefined || raw === '') return LOOPBACK;
+  if (!HOST_PATTERN.test(raw)) {
+    throw new Error(`TASKFLOW_BIND must be an IP address or hostname, got "${raw}"`);
+  }
+  return raw;
+}
+
+export function isLoopback(host: string): boolean {
+  return host === LOOPBACK || host === 'localhost' || host === '::1';
+}
+
+/** Undefined keeps Vite's default Host check, which blocks DNS rebinding. */
+export function allowedHosts(env: Record<string, string | undefined>): string[] | undefined {
+  const host = env.TASKFLOW_ALLOWED_HOST;
+  return host ? [host] : undefined;
+}

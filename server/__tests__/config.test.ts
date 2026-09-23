@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { API_HOST, apiPort, execDbPath } from '../config';
+import { API_HOST, apiPort, bindHost, allowedHosts, isLoopback, execDbPath } from '../config';
 
 describe('apiPort', () => {
   it('defaults to 4100', () => {
@@ -25,6 +25,45 @@ describe('apiPort', () => {
 describe('API_HOST', () => {
   it('is loopback only, because the API has no authentication', () => {
     expect(API_HOST).toBe('127.0.0.1');
+  });
+});
+
+describe('bindHost', () => {
+  it('defaults to loopback', () => {
+    expect(bindHost({})).toBe('127.0.0.1');
+  });
+
+  it('treats an empty value as unset', () => {
+    expect(bindHost({ TASKFLOW_BIND: '' })).toBe('127.0.0.1');
+  });
+
+  it('passes a tailnet address or hostname through', () => {
+    expect(bindHost({ TASKFLOW_BIND: '100.64.0.7' })).toBe('100.64.0.7');
+    expect(bindHost({ TASKFLOW_BIND: 'office-pc.tailnet.ts.net' })).toBe('office-pc.tailnet.ts.net');
+  });
+
+  it.each([' 100.64.0.7', 'a b', 'http://host', 'host/path'])('rejects %j', (value) => {
+    expect(() => bindHost({ TASKFLOW_BIND: value })).toThrow(/TASKFLOW_BIND/);
+  });
+});
+
+describe('isLoopback', () => {
+  it.each(['127.0.0.1', 'localhost', '::1'])('%s is loopback', (host) => {
+    expect(isLoopback(host)).toBe(true);
+  });
+
+  it('a tailnet address is not', () => {
+    expect(isLoopback('100.64.0.7')).toBe(false);
+  });
+});
+
+describe('allowedHosts', () => {
+  it('is undefined by default so Vite keeps its own Host check', () => {
+    expect(allowedHosts({})).toBeUndefined();
+  });
+
+  it('lists the configured host', () => {
+    expect(allowedHosts({ TASKFLOW_ALLOWED_HOST: 'office-pc.tailnet.ts.net' })).toEqual(['office-pc.tailnet.ts.net']);
   });
 });
 

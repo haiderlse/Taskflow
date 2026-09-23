@@ -1,12 +1,26 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import type Database from 'better-sqlite3';
 import { currentVersion } from './db/migrate';
-import { ok, execErrorHandler } from './http';
+import { ok, ApiError, execErrorHandler } from './http';
+import type { Health } from '../../src/shared/exec/api';
+
+export type ExecRouterOptions = { extend?: (router: Router) => void };
 
 /** Every /api/exec resource mounts here. Later phases add one file per resource. */
-export function createExecRouter(db: Database.Database): Router {
+export function createExecRouter(db: Database.Database, options?: ExecRouterOptions): Router {
   const router = Router();
-  router.get('/health', (_req, res) => ok(res, { status: 'ok', schemaVersion: currentVersion(db) }));
+  // This router owns its own body parsing so a malformed or oversized body
+  // to any /api/exec/* path stays inside the envelope, even if it is mounted
+  // before the app-level parser.
+  router.use(express.json({ limit: '5mb' }));
+  router.get('/health', (_req, res) => {
+    const health: Health = { status: 'ok', schemaVersion: currentVersion(db) };
+    ok(res, health);
+  });
+  // Test-only hook: registers routes after the router's own, before the 404
+  // catch-all and the error handler. Production never passes it.
+  options?.extend?.(router);
+  router.use((_req, _res, next) => next(new ApiError(404, 'NOT_FOUND', 'no such endpoint')));
   // Error-handling middleware must be registered last, after every route.
   router.use(execErrorHandler);
   return router;

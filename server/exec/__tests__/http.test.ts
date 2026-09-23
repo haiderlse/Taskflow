@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { ApiError, execErrorHandler } from '../http';
+import { BadRequestError } from '../../db/sql';
 
 function fakeResponse() {
   const res = {
@@ -67,6 +68,12 @@ describe('execErrorHandler', () => {
 
     const malformed = run(Object.assign(new Error('Unexpected token'), { status: 400 }));
     expect(malformed.body).toEqual({ success: false, error: 'invalid request body', code: 'VALIDATION' });
+  });
+
+  it('maps a BadRequestError to 400 VALIDATION with its message', () => {
+    const res = run(new BadRequestError('unknown column: pwned'));
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ success: false, error: 'unknown column: pwned', code: 'VALIDATION' });
   });
 
   it('maps SQLite constraint failures to 400 CONSTRAINT without the driver message', () => {

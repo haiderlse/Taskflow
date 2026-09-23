@@ -55,9 +55,11 @@ export function createApp(injected?: Database.Database, execInjected?: Database.
   const execDb = execInjected ?? prepareExecDb(underTestRunner() ? ':memory:' : execDbPath(process.env));
 
   const app = express();
+  // Mounted before the app-level parser so the exec router's own express.json()
+  // handles every /api/exec/* body; legacy routes still get the parser below.
+  app.use('/api/exec', createExecRouter(execDb));
   app.use(express.json({ limit: '5mb' }));
   app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
-  app.use('/api/exec', createExecRouter(execDb));
   app.use('/api/users', usersRouter(db));
   app.use('/api/projects', projectsRouter(db));
   app.use('/api/tasks', tasksRouter(db));

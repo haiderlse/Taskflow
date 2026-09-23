@@ -1,6 +1,7 @@
 import type { ErrorRequestHandler, Response } from 'express';
 import { ZodError } from 'zod';
 import type { ErrorCode } from '../../src/shared/exec/api';
+import { BadRequestError } from '../db/sql';
 
 /** An error a route raises on purpose; the handler sends it as-is. */
 export class ApiError extends Error {
@@ -41,6 +42,10 @@ const sqliteCode = (err: unknown): string | undefined => {
 export const execErrorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   if (err instanceof ApiError) {
     fail(res, err.status, err.code, err.message, err.details);
+    return;
+  }
+  if (err instanceof BadRequestError) {
+    fail(res, 400, 'VALIDATION', err.message);
     return;
   }
   if (err instanceof ZodError) {

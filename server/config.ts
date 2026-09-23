@@ -17,3 +17,8 @@ export function apiPort(env: Record<string, string | undefined>): number {
   }
   return port;
 }
+
+/** Where the execution system keeps its data. Tests and e2e runs point this at a temp file. */
+export function execDbPath(env: Record<string, string | undefined>): string {
+  return env.EXEC_DB_PATH || 'data/execution.db';
+}

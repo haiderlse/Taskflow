@@ -26,3 +26,8 @@ dist-ssr
 # local database
 data/
 coverage/
+
+# Playwright
+test-results/
+playwright-report/
+.playwright-mcp/

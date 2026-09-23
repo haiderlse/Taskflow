@@ -136,6 +136,7 @@ CREATE TABLE day_slots (
   slot       INTEGER NOT NULL CHECK (slot IN (1, 2)),
   task_id    TEXT    NOT NULL REFERENCES tasks(id),
   created_at TEXT    NOT NULL,
+  updated_at TEXT    NOT NULL,
   PRIMARY KEY (date, slot),
   UNIQUE (date, task_id)
 ) STRICT;

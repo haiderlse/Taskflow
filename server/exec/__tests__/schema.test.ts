@@ -33,7 +33,7 @@ const insertDay = (date: string) =>
   db.prepare('INSERT INTO days (date, created_at, updated_at) VALUES (?, ?, ?)').run(date, NOW, NOW);
 
 const insertSlot = (date: string, slot: number, taskId: string) =>
-  db.prepare('INSERT INTO day_slots (date, slot, task_id, created_at) VALUES (?, ?, ?, ?)').run(date, slot, taskId, NOW);
+  db.prepare('INSERT INTO day_slots (date, slot, task_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)').run(date, slot, taskId, NOW, NOW);
 
 beforeEach(() => {
   db = prepareExecDb(':memory:');

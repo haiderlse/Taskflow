@@ -24,19 +24,6 @@ export interface User {
   approvalLimit?: number; // Maximum amount/value this user can approve
 }
 
-export interface AuthCredentials {
-  email: string;
-  password: string;
-}
-
-export interface RegisterData {
-  email: string;
-  password: string;
-  displayName: string;
-  department?: string;
-  role?: UserRole;
-}
-
 export type ProjectHealthStatus = 'on_track' | 'at_risk' | 'off_track' | 'on_hold' | 'completed';
 
 export interface ProjectSection {

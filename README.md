@@ -20,50 +20,15 @@ A modern React-based project management application similar to Asana, now powere
 - **Styling**: Tailwind CSS (via CDN)
 - **State Management**: React hooks and context
 
-## Setup Instructions
+## Running locally
 
-### Prerequisites
-- Node.js (version 16 or higher)
-- A Supabase account and project
+    npm install
+    npm run server   # API on http://127.0.0.1:4100 (override with TASKFLOW_API_PORT)
+    npm run dev      # UI on http://127.0.0.1:3000 (local machine only)
 
-### 1. Clone and Install
-
-```bash
-git clone <repository-url>
-cd Taskflow
-npm install
-```
-
-### 2. Set up Supabase
-
-1. Create a new project at [supabase.com](https://supabase.com)
-2. Go to Project Settings > API to get your project URL and anon key
-3. Copy the SQL schema from `supabase-schema.sql` and run it in the Supabase SQL Editor
-
-### 3. Environment Configuration
-
-Create a `.env.local` file in the root directory:
-
-```bash
-# Supabase Configuration
-VITE_SUPABASE_URL=your_supabase_project_url
-VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
-```
-
-Replace `your_supabase_project_url` and `your_supabase_anon_key` with your actual Supabase values.
-
-### 4. Run the Application
-
-For development:
-```bash
-npm run dev
-```
-
-For production build:
-```bash
-npm run build
-npm run preview
-```
+Data is stored in `data/taskflow.db` (SQLite). To reset, delete that file —
+it is re-seeded with demo data on next start. There is no authentication;
+the app runs as a single user.
 
 ## Demo Mode
 

@@ -110,7 +110,7 @@ Retire (after Phase 7): everything else under `components/`, `services/`,
 | 4 | Second SQLite file `data/execution.db` | Own schema, own migration runner (`PRAGMA user_version` + numbered SQL files applied at boot), `busy_timeout` set. Routes under `/api/exec/*`. Opened by the same Express process. | No collision with legacy `tasks` / `projects`. The 181 legacy tests stay untouched. Deleting legacy is one `rm`. |
 | 5 | Tailwind v4 via `@tailwindcss/vite` | Replaces the Play CDN, its inline config and the esm.sh importmap. Dark mode keeps the `.dark` class via `@custom-variant dark (&:where(.dark, .dark *))`. Tokens in `src/styles/app.css`. | Legacy already uses v4 class names, so ~200 no-op classes start working. Production builds get real CSS. |
 | 6 | `TASKFLOW_BIND` env var | Default `127.0.0.1`. Set to a tailnet IP to expose Vite only; `TASKFLOW_ALLOWED_HOST` feeds `server.allowedHosts`. The API always binds `127.0.0.1:4100`. Startup prints a warning when the bind is not loopback. | The phone talks to Vite; Vite proxies. The unauthenticated write surface never binds beyond the machine. |
-| 7 | `strict: true` for new code | `tsconfig.app.json` extends the root config with `strict`, covering `src/` and `server/`; `npm run lint` runs both configs. | Legacy stays non-strict until it is deleted. |
+| 7 | `strict: true` for new code | `tsconfig.app.json` extends the root config with `strict`, covering `src/`, `server/`, `e2e/`, `index.tsx` and the root configs; `npm run lint` runs it alone. The root config is not a lint gate: with `@types/react` installed it reports latent errors in the frozen legacy tree, which is deleted in Phase 7 and is guarded by its own tests until then. | Legacy stays non-strict until it is deleted. |
 | 8 | Phase 0 first | Finish plan Tasks 10–11: remove the login gate, delete Supabase, drop the `GEMINI_API_KEY` define. | About an hour, already specified. Stops the repo carrying a login screen that protects nothing. |
 
 Dev workflow stays two terminals: `npm run server` and `npm run dev`.
@@ -559,7 +559,7 @@ definition-of-done field takes focus. It never blocks saving.
 Vitest runs two projects: `node` for `server/**` and `src/shared/**`, `jsdom`
 for the rest of `src/**`. Coverage thresholds stay at 80% and include
 `server/exec/**` and `src/**`. Playwright lives in `e2e/` behind
-`npm run e2e`, which starts the API on a temporary `DB_PATH` and Vite on a free
+`npm run test:e2e`, which starts the API on a temporary `DB_PATH` and Vite on a free
 port. TDD applies: the failing test lands before the code that passes it.
 
 **After every phase** (§26 Stage 5): `npm run lint`, `npm run test:coverage`,
@@ -571,7 +571,7 @@ pass.
 
 | Item | Here |
 |---|---|
-| Secrets | none in code; `.env.example` lists only `TASKFLOW_API_PORT`, `DB_PATH`, `TASKFLOW_BIND`, `TASKFLOW_ALLOWED_HOST` |
+| Secrets | none in code; `.env.example` lists only `TASKFLOW_API_PORT`, `DB_PATH`, `EXEC_DB_PATH`, `TASKFLOW_BIND`, `TASKFLOW_ALLOWED_HOST` |
 | Input validation | zod on every body; `assertValidColumns` before SQL; parameterised statements only |
 | SQL injection | identifiers from the `PRAGMA table_info` allowlist; values always bound |
 | XSS | React escaping; no `dangerouslySetInnerHTML`; notes render as text, no markdown in the MVP |

@@ -25,6 +25,6 @@ regardless; the phone talks to Vite, which proxies `/api`.
 
 ## Checks
 
-    npm run lint            # TypeScript, root and strict configs
+    npm run lint            # TypeScript, strict config (src/, server/, e2e/, root configs)
     npm run test:coverage   # vitest, node + jsdom projects, 80% floor
     npm run test:e2e        # Playwright journeys on a temporary database

@@ -40,7 +40,7 @@ export default defineConfig({
       cwd: '..', // Playwright runs webServer commands from the config's directory; the repo root is one level up
       url: `http://127.0.0.1:${WEB_PORT}`,
       reuseExistingServer: false,
-      env: { TASKFLOW_API_PORT: String(API_PORT) },
+      env: { TASKFLOW_API_PORT: String(API_PORT), TASKFLOW_BIND: '127.0.0.1' },
     },
   ],
 });

@@ -1,21 +1,15 @@
-
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './src/styles/app.css';
-import './index.css';
-import App from './App';
-import { ThemeProvider } from './utils/ThemeContext';
+import { App } from './src/app/App';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
-  throw new Error("Could not find root element to mount to");
+  throw new Error('Could not find root element to mount to');
 }
 
-const root = ReactDOM.createRoot(rootElement);
-root.render(
+ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
-    <ThemeProvider>
-      <App />
-    </ThemeProvider>
+    <App />
   </React.StrictMode>
 );

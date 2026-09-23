@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { API_HOST, apiPort } from '../config';
+import { API_HOST, apiPort, execDbPath } from '../config';
 
 describe('apiPort', () => {
   it('defaults to 4100', () => {
@@ -25,5 +25,19 @@ describe('apiPort', () => {
 describe('API_HOST', () => {
   it('is loopback only, because the API has no authentication', () => {
     expect(API_HOST).toBe('127.0.0.1');
+  });
+});
+
+describe('execDbPath', () => {
+  it('defaults to data/execution.db', () => {
+    expect(execDbPath({})).toBe('data/execution.db');
+  });
+
+  it('reads EXEC_DB_PATH', () => {
+    expect(execDbPath({ EXEC_DB_PATH: '/tmp/e2e/execution.db' })).toBe('/tmp/e2e/execution.db');
+  });
+
+  it('treats an empty value as unset', () => {
+    expect(execDbPath({ EXEC_DB_PATH: '' })).toBe('data/execution.db');
   });
 });

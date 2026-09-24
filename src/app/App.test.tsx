@@ -45,4 +45,17 @@ describe('the app shell', () => {
     expect(await screen.findByRole('heading', { level: 1, name: title })).toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Primary' })).toBeNull();
   });
+
+  it('shows a way back from an unknown URL, inside the shell', async () => {
+    renderRoute('/nowhere');
+    expect(await screen.findByRole('heading', { level: 1, name: 'Nothing here' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Back to Today' })).toHaveAttribute('href', '/');
+    expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
+  });
+
+  it('warns about an unreachable API on the full-screen capture page too', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('fetch failed'); }));
+    renderRoute('/capture');
+    expect(await screen.findByText(/Local API not reachable/)).toBeInTheDocument();
+  });
 });

@@ -11,6 +11,7 @@ import Focus from '../screens/Focus';
 import Shutdown from '../screens/Shutdown';
 import Plan from '../screens/Plan';
 import Capture from '../screens/Capture';
+import NotFound from '../screens/NotFound';
 
 // Loaded only when someone types /legacy, so its bundle never rides along with the new app.
 const Legacy = lazy(() => import('./Legacy'));
@@ -25,6 +26,7 @@ export const routes: RouteObject[] = [
       { path: 'inbox', element: <Inbox /> },
       { path: 'projects', element: <Projects /> },
       { path: 'review', element: <Review /> },
+      { path: '*', element: <NotFound /> },
     ],
   },
   {

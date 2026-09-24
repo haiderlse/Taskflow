@@ -5,7 +5,6 @@
 
 @theme {
   /* Legacy palette from the old inline Tailwind config; keeps /legacy rendering. */
-  --color-sidebar: #202123;
   --color-main-bg: #f7f9fa;
   --color-main-bg-darker: #e0f2f1;
   --color-card: #ffffff;
@@ -18,7 +17,6 @@
   --color-subtle-text: #9ca3af;
   --color-border-color: #e5e7eb;
   --color-accent-green: #10b981;
-  --color-accent-pink: #ec4899;
 
   /* Execution system tokens: one accent, calm neutrals. Refined in the design pass. */
   --color-ink: #16181d;
@@ -26,13 +24,15 @@
   --color-paper: #fafaf9;
   --color-paper-raised: #ffffff;
   --color-line: #e7e5e4;
-  --color-focus: #2563eb;
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
 @layer base {
   html {
-    color-scheme: light dark;
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
   }
   body {
     @apply bg-paper text-ink antialiased dark:bg-ink dark:text-paper;

@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { ApiStatus } from '../components/ApiStatus';
+import { CaptureShortcut } from '../components/CaptureShortcut';
 
 const NAV = [
   { to: '/', label: 'Today', end: true },
@@ -28,6 +29,7 @@ export function Shell() {
       </nav>
       <main className="flex-1 space-y-4 px-4 pb-24 pt-6 md:px-10 md:pb-10">
         <ApiStatus />
+        <CaptureShortcut />
         <Outlet />
       </main>
     </div>

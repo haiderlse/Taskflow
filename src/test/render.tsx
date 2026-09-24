@@ -5,13 +5,16 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { ThemeProvider } from '../../utils/ThemeContext';
 import { createQueryClient } from '../api/queryClient';
 import { routes } from '../app/routes';
+import { ToastProvider } from '../components/Toast';
 
 /** Renders inside the app's providers with retries off, so failures surface at once. */
 export function renderWithProviders(ui: ReactElement) {
   const client = createQueryClient({ retry: false });
   return render(
     <ThemeProvider>
-      <QueryClientProvider client={client}>{ui}</QueryClientProvider>
+      <QueryClientProvider client={client}>
+        <ToastProvider>{ui}</ToastProvider>
+      </QueryClientProvider>
     </ThemeProvider>
   );
 }

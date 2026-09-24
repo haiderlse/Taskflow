@@ -1,7 +1,8 @@
 import { Link } from 'react-router-dom';
 import { ScreenShell } from '../components/ScreenShell';
+import { CaptureBar } from '../components/CaptureBar';
 
-/** Phase 1: an empty day. Phase 3 replaces the unconditional banner with the real check. */
+/** Phase 2: an empty day with capture pinned at the bottom. Phase 3 replaces the banner with the real check. */
 export default function Today() {
   return (
     <ScreenShell title="Today">
@@ -12,6 +13,9 @@ export default function Today() {
         Plan your first week
       </Link>
       <p className="text-ink-muted">Nothing is planned yet. The week's outcomes come first.</p>
+      <div className="sticky bottom-20 pt-6 md:bottom-6">
+        <CaptureBar />
+      </div>
     </ScreenShell>
   );
 }

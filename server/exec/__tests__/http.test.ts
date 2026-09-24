@@ -73,7 +73,12 @@ describe('execErrorHandler', () => {
   it('maps a BadRequestError to 400 VALIDATION with its message', () => {
     const res = run(new BadRequestError('unknown column: pwned'));
     expect(res.statusCode).toBe(400);
-    expect(res.body).toEqual({ success: false, error: 'unknown column: pwned', code: 'VALIDATION' });
+    expect(res.body).toEqual({ success: false, error: 'invalid request body', code: 'VALIDATION' });
+  });
+
+  it('never echoes an unknown column name', () => {
+    const res = run(new BadRequestError('unknown column: evil'));
+    expect(JSON.stringify(res.body)).not.toContain('evil');
   });
 
   it('maps SQLite constraint failures to 400 CONSTRAINT without the driver message', () => {

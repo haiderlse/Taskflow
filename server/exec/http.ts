@@ -45,11 +45,16 @@ export const execErrorHandler: ErrorRequestHandler = (err, _req, res, _next) => 
     return;
   }
   if (err instanceof BadRequestError) {
-    fail(res, 400, 'VALIDATION', err.message);
+    // The message names the offending column or value (assertValidColumns, toIsoDate); never send it to the client.
+    fail(res, 400, 'VALIDATION', 'invalid request body');
     return;
   }
   if (err instanceof ZodError) {
-    const details = err.issues.map((issue) => ({ path: issue.path.join('.'), message: issue.message }));
+    // An unrecognized-keys message embeds the client-supplied key name; every other issue's message is safe.
+    const details = err.issues.map((issue) => ({
+      path: issue.path.join('.'),
+      message: issue.code === 'unrecognized_keys' ? 'unknown field' : issue.message,
+    }));
     fail(res, 400, 'VALIDATION', 'invalid request body', details);
     return;
   }

@@ -101,7 +101,7 @@ describe('the /api/exec envelope, end to end', () => {
     });
     const res = await request(app).get('/api/exec/throws-bad-request');
     expect(res.status).toBe(400);
-    expect(res.body).toEqual({ success: false, error: 'unknown column: pwned', code: 'VALIDATION' });
+    expect(res.body).toEqual({ success: false, error: 'invalid request body', code: 'VALIDATION' });
   });
 
   it('sends a SQLITE_CONSTRAINT error through a real mount as 400 CONSTRAINT', async () => {

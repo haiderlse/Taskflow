@@ -42,6 +42,15 @@ describe('POST /api/exec/tasks', () => {
     expect(extra.status).toBe(400);
     expect(JSON.stringify(extra.body)).not.toContain('done');
   });
+
+  it('never echoes an unknown key name', async () => {
+    const res = await request(app)
+      .post('/api/exec/tasks')
+      .send({ title: 'x', context: 'work', '<script>alert(1)</script>': 'pwn' });
+    expect(res.status).toBe(400);
+    expect(res.body.details[0].message).toBe('unknown field');
+    expect(JSON.stringify(res.body)).not.toContain('<script>');
+  });
 });
 
 describe('GET /api/exec/tasks', () => {
@@ -75,6 +84,12 @@ describe('GET /api/exec/tasks', () => {
     expect(status.body.code).toBe('VALIDATION');
     const key = await request(app).get('/api/exec/tasks?page=2');
     expect(key.status).toBe(400);
+  });
+
+  it('never echoes an unknown query key', async () => {
+    const res = await request(app).get('/api/exec/tasks?evilKey=2');
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(res.body)).not.toContain('evilKey');
   });
 });
 

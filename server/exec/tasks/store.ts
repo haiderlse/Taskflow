@@ -4,7 +4,7 @@ import { rowToEntity, entityToRow, type FieldSpec } from '../../db/mappers';
 import { assertValidColumns, getTableColumns } from '../../db/sql';
 import { ApiError } from '../http';
 import { addDays } from '../../../src/shared/exec/dates';
-import { OPEN_STATUSES } from '../../../src/shared/exec/schemas';
+import { OPEN_STATUSES, WAITING_STATUSES } from '../../../src/shared/exec/schemas';
 import type { Task, TaskCreate, TaskPatch, TaskListQuery } from '../../../src/shared/exec/schemas';
 import { transitionStamps, requiresOwner } from './transitions';
 
@@ -44,8 +44,8 @@ export function listTasks(db: Database.Database, query: TaskListQuery): Task[] {
     params.push(...OPEN_STATUSES, query.week, addDays(query.week, 6));
   }
   if (query.followUpBy) {
-    clauses.push("status IN ('delegated', 'waiting') AND follow_up_date IS NOT NULL AND follow_up_date <= ?");
-    params.push(query.followUpBy);
+    clauses.push(`status IN (${placeholders(WAITING_STATUSES.length)}) AND follow_up_date IS NOT NULL AND follow_up_date <= ?`);
+    params.push(...WAITING_STATUSES, query.followUpBy);
   }
   const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
   return db.prepare(`SELECT * FROM tasks ${where} ORDER BY captured_at DESC, id`).all(...params).map(toTask);

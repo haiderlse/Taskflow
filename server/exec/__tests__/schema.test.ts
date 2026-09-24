@@ -249,6 +249,10 @@ describe('the constraints no product limit covers', () => {
     expect(() => insertProject('p3', 'build')).not.toThrow();
   });
 
+  it('limits a must ship to the two contexts', () => {
+    expect(() => insertMustShip('m9', '2026-09-22', 'home')).toThrow(/CHECK constraint failed: context IN \('work', 'build'\)/);
+  });
+
   it('limits an outcome to the four categories and the review code lists', () => {
     insertWeek();
     expect(() =>

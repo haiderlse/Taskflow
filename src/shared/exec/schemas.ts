@@ -14,9 +14,9 @@ export const OPEN_STATUSES: readonly TaskStatus[] = ['inbox', 'this_week', 'late
 export const WAITING_STATUSES: readonly TaskStatus[] = ['delegated', 'waiting'];
 
 export const calendarDateSchema = z.string().refine(isCalendarDate, 'expected a calendar date YYYY-MM-DD');
-const timestamp = z.string().datetime();
+const timestamp = z.iso.datetime();
 const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'expected HH:MM');
-const uuid = z.string().uuid();
+const uuid = z.uuid();
 const title = z.string().trim().min(1, 'title is required').max(200, 'title is too long');
 const notes = z.string().max(4000, 'notes are too long');
 

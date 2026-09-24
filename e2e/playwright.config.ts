@@ -2,20 +2,22 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
+import { API_PORT, WEB_PORT, BASE_URL } from './ports';
 
-const API_PORT = 4150;
-const WEB_PORT = 3100;
 // A fresh database per run: the journeys start from "Plan your first week" every time.
 const dataDir = mkdtempSync(join(tmpdir(), 'taskflow-e2e-'));
+process.env.TASKFLOW_E2E_DATA_DIR = dataDir;
 
 export default defineConfig({
   testDir: '.',
   timeout: 30_000,
   fullyParallel: false,
+  workers: 1,
   reporter: [['list'], ['html', { open: 'never', outputFolder: '../playwright-report' }]],
   outputDir: '../test-results',
+  globalTeardown: './teardown.ts',
   use: {
-    baseURL: `http://127.0.0.1:${WEB_PORT}`,
+    baseURL: BASE_URL,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },

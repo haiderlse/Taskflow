@@ -23,6 +23,15 @@ To reach the phone capture page over a tailnet, set `TASKFLOW_BIND` and
 `TASKFLOW_ALLOWED_HOST` (see `.env.example`). The API stays on loopback
 regardless; the phone talks to Vite, which proxies `/api`.
 
+## Capturing
+
+Press `c` on any screen, or type into the bar at the bottom of Today. On the
+phone, open `/capture` (add it to the home screen: it ships a web-app
+manifest). A capture always lands in the Inbox, never on Today. Process the
+Inbox with the keys `T` (this week), `L` (later), `D` (delegate), `S`
+(schedule), `P` (project) and `X` (delete an accidental capture); `j`/`k`
+move the selection.
+
 ## Checks
 
     npm run lint            # TypeScript, strict config (src/, server/, e2e/, root configs)

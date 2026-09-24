@@ -5,7 +5,8 @@ import { defineConfig, devices } from '@playwright/test';
 import { API_PORT, WEB_PORT, BASE_URL } from './ports';
 
 // A fresh database per run: the journeys start from "Plan your first week" every time.
-const dataDir = mkdtempSync(join(tmpdir(), 'taskflow-e2e-'));
+// Playwright loads this config in more than one process; only the first creates the directory.
+const dataDir = process.env.TASKFLOW_E2E_DATA_DIR ?? mkdtempSync(join(tmpdir(), 'taskflow-e2e-'));
 process.env.TASKFLOW_E2E_DATA_DIR = dataDir;
 
 export default defineConfig({

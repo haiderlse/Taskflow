@@ -56,4 +56,23 @@ describe('api', () => {
     const error = await api.get('/health').catch((e: unknown) => e);
     expect(error).toMatchObject({ status: 502, code: 'INTERNAL' });
   });
+
+  it('sends PATCH and PUT with JSON bodies and DELETE without one', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ success: true, data: { id: 't1' } }));
+    vi.stubGlobal('fetch', fetchMock);
+    await api.patch('/tasks/t1', { status: 'later' });
+    await api.put('/settings', { timezone: 'Asia/Karachi' });
+    await api.delete('/tasks/t1');
+    const calls = fetchMock.mock.calls as unknown as [string, RequestInit][];
+    expect(calls.map(([, init]) => init.method)).toEqual(['PATCH', 'PUT', 'DELETE']);
+    expect(calls[0][1].body).toBe(JSON.stringify({ status: 'later' }));
+    expect(calls[2][1].body).toBeUndefined();
+    expect(new Headers(calls[2][1].headers).get('content-type')).toBeNull();
+  });
+
+  it('rejects a failure envelope even when the HTTP status is 200', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ success: false, error: 'no such task', code: 'NOT_FOUND' }, 200)));
+    const error = await api.get('/tasks/t1').catch((e: unknown) => e);
+    expect(error).toMatchObject({ status: 200, code: 'NOT_FOUND', message: 'no such task' });
+  });
 });

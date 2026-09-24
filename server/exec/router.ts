@@ -3,6 +3,9 @@ import type Database from 'better-sqlite3';
 import { currentVersion } from './db/migrate';
 import { ok, ApiError, execErrorHandler } from './http';
 import type { Health } from '../../src/shared/exec/api';
+import { tasksRouter } from './routes/tasks';
+import { settingsRouter } from './routes/settings';
+import { projectsRouter } from './routes/projects';
 
 export type ExecRouterOptions = { extend?: (router: Router) => void };
 
@@ -17,6 +20,9 @@ export function createExecRouter(db: Database.Database, options?: ExecRouterOpti
     const health: Health = { status: 'ok', schemaVersion: currentVersion(db) };
     ok(res, health);
   });
+  router.use('/tasks', tasksRouter(db));
+  router.use('/settings', settingsRouter(db));
+  router.use('/projects', projectsRouter(db));
   // Test-only hook: registers routes after the router's own, before the 404
   // catch-all and the error handler. Production never passes it.
   options?.extend?.(router);

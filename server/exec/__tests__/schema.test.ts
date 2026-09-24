@@ -40,7 +40,7 @@ beforeEach(() => {
 });
 
 describe('001_init', () => {
-  it('reaches schema version 1 with the nine tables', () => {
+  it('reaches schema version 1 with the nine tables and the ledger', () => {
     expect(currentVersion(db)).toBe(1);
     const names = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").pluck().all();
     expect(names).toEqual([
@@ -50,6 +50,7 @@ describe('001_init', () => {
       'must_ships',
       'outcomes',
       'projects',
+      'schema_migrations',
       'settings',
       'tasks',
       'weeks',

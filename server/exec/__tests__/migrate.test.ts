@@ -56,7 +56,7 @@ describe('migrate', () => {
     const applied = migrate(db, dir);
     expect(applied.map((m) => m.version)).toEqual([1, 2]);
     expect(currentVersion(db)).toBe(2);
-    expect(tables(db)).toEqual(['a', 'b']);
+    expect(tables(db)).toEqual(['a', 'b', 'schema_migrations']);
   });
 
   it('is idempotent: a second run applies nothing', () => {
@@ -73,7 +73,7 @@ describe('migrate', () => {
     migrate(db, dir);
     write('002_second.sql', 'CREATE TABLE b (x INTEGER);');
     expect(migrate(db, dir).map((m) => m.version)).toEqual([2]);
-    expect(tables(db)).toEqual(['a', 'b']);
+    expect(tables(db)).toEqual(['a', 'b', 'schema_migrations']);
   });
 
   it('rolls back a failing migration and leaves the version where it was', () => {
@@ -82,6 +82,67 @@ describe('migrate', () => {
     const db = openExecDb(':memory:');
     expect(() => migrate(db, dir)).toThrow(/no such table: nope/);
     expect(currentVersion(db)).toBe(1);
-    expect(tables(db)).toEqual(['a']);
+    expect(tables(db)).toEqual(['a', 'schema_migrations']);
+  });
+});
+
+describe('schema_migrations ledger', () => {
+  const ledger = (db: Database.Database) =>
+    db.prepare('SELECT version, name, checksum FROM schema_migrations ORDER BY version').all() as {
+      version: number;
+      name: string;
+      checksum: string;
+    }[];
+
+  it('records every applied migration with a sha256 checksum of its text', () => {
+    write('001_first.sql', 'CREATE TABLE a (x INTEGER);');
+    const db = openExecDb(':memory:');
+    const [applied] = migrate(db, dir);
+    expect(applied.checksum).toMatch(/^[0-9a-f]{64}$/);
+    expect(ledger(db)).toEqual([{ version: 1, name: 'first', checksum: applied.checksum }]);
+    expect(tables(db)).toContain('schema_migrations');
+  });
+
+  it('refuses to run when an applied migration file has changed since', () => {
+    write('001_first.sql', 'CREATE TABLE a (x INTEGER);');
+    const db = openExecDb(':memory:');
+    migrate(db, dir);
+    write('001_first.sql', 'CREATE TABLE a (x INTEGER, y INTEGER);');
+    expect(() => migrate(db, dir)).toThrow(/001_first\.sql has changed since it was applied/);
+    expect(currentVersion(db)).toBe(1);
+  });
+
+  it('refuses to run when an applied migration file is gone', () => {
+    write('001_first.sql', 'CREATE TABLE a (x INTEGER);');
+    const db = openExecDb(':memory:');
+    migrate(db, dir);
+    rmSync(join(dir, '001_first.sql'));
+    expect(() => migrate(db, dir)).toThrow(/migration 1 \(first\) was applied to this database but its file no longer exists/);
+  });
+
+  it('backfills the ledger for a database migrated before the ledger existed', () => {
+    write('001_first.sql', 'CREATE TABLE a (x INTEGER);');
+    const db = openExecDb(':memory:');
+    db.exec('CREATE TABLE a (x INTEGER);');
+    db.pragma('user_version = 1');
+    expect(migrate(db, dir)).toEqual([]);
+    expect(ledger(db).map((row) => [row.version, row.name])).toEqual([[1, 'first']]);
+  });
+
+  it('skips a version that was applied by someone else between listing and running', () => {
+    write('001_first.sql', 'CREATE TABLE a (x INTEGER);');
+    const db = openExecDb(':memory:');
+    migrate(db, dir);
+    write('002_second.sql', 'CREATE TABLE b (x INTEGER);');
+    // Simulate a second process having applied 002 already: the table, the ledger row and the version say so.
+    db.exec('CREATE TABLE b (x INTEGER);');
+    db.prepare('INSERT INTO schema_migrations (version, name, checksum, applied_at) VALUES (2, ?, ?, ?)').run(
+      'second',
+      listMigrations(dir)[1].checksum,
+      '2026-09-24T00:00:00.000Z'
+    );
+    db.pragma('user_version = 2');
+    expect(migrate(db, dir)).toEqual([]);
+    expect(tables(db)).toEqual(['a', 'b', 'schema_migrations']);
   });
 });

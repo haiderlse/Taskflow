@@ -65,5 +65,12 @@ export function createApp(injected?: Database.Database, execInjected?: Database.
   app.use('/api/tasks', tasksRouter(db));
   // Error-handling middleware must be registered last, after all routes.
   app.use(errorHandler);
+
+  // The entry point calls this on SIGINT/SIGTERM so WAL files are checkpointed on exit.
+  app.locals.closeDatabases = () => {
+    execDb.close();
+    db.close();
+  };
+
   return app;
 }

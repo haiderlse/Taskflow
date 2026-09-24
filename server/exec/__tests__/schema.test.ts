@@ -84,7 +84,7 @@ describe('001_init', () => {
   it('refuses a second settings row', () => {
     expect(() =>
       db.prepare('INSERT INTO settings (id, created_at, updated_at) VALUES (2, ?, ?)').run(NOW, NOW)
-    ).toThrow(/CHECK constraint failed/);
+    ).toThrow(/CHECK constraint failed: id = 1/);
   });
 });
 
@@ -95,7 +95,7 @@ describe('outcomes: at most three per week', () => {
     insertOutcome('o1', 1);
     insertOutcome('o2', 2);
     insertOutcome('o3', 3);
-    expect(() => insertOutcome('o4', 4)).toThrow(/CHECK constraint failed/);
+    expect(() => insertOutcome('o4', 4)).toThrow(/CHECK constraint failed: slot IN \(1, 2, 3\)/);
   });
 
   it('rejects two outcomes in the same slot of one week', () => {
@@ -117,8 +117,8 @@ describe('outcomes: at most three per week', () => {
   });
 
   it('requires a killed outcome to give up its slot, and an active one to hold one', () => {
-    expect(() => insertOutcome('killed-with-slot', 1, 'killed')).toThrow(/CHECK constraint failed/);
-    expect(() => insertOutcome('active-without-slot', null, 'active')).toThrow(/CHECK constraint failed/);
+    expect(() => insertOutcome('killed-with-slot', 1, 'killed')).toThrow(/CHECK constraint failed: \(status = 'killed'\) = \(slot IS NULL\)/);
+    expect(() => insertOutcome('active-without-slot', null, 'active')).toThrow(/CHECK constraint failed: \(status = 'killed'\) = \(slot IS NULL\)/);
     expect(() => insertOutcome('killed', null, 'killed')).not.toThrow();
   });
 
@@ -143,8 +143,8 @@ describe('outcomes: at most three per week', () => {
 
   it('keeps progress between 0 and 100 and the review fields to their code lists', () => {
     insertOutcome('o1', 1);
-    expect(() => db.prepare("UPDATE outcomes SET progress = 101 WHERE id = 'o1'").run()).toThrow(/CHECK/);
-    expect(() => db.prepare("UPDATE outcomes SET review_reason = 'tired' WHERE id = 'o1'").run()).toThrow(/CHECK/);
+    expect(() => db.prepare("UPDATE outcomes SET progress = 101 WHERE id = 'o1'").run()).toThrow(/CHECK constraint failed: progress BETWEEN 0 AND 100/);
+    expect(() => db.prepare("UPDATE outcomes SET review_reason = 'tired' WHERE id = 'o1'").run()).toThrow(/CHECK constraint failed: review_reason IN \(/);
     expect(() => db.prepare("UPDATE outcomes SET review_reason = 'too_many_meetings' WHERE id = 'o1'").run()).not.toThrow();
   });
 });
@@ -182,7 +182,7 @@ describe('day_slots: at most two secondaries per day', () => {
   it('accepts slots 1 and 2 and rejects slot 3', () => {
     insertSlot('2026-09-22', 1, 't1');
     insertSlot('2026-09-22', 2, 't2');
-    expect(() => insertSlot('2026-09-22', 3, 't3')).toThrow(/CHECK constraint failed/);
+    expect(() => insertSlot('2026-09-22', 3, 't3')).toThrow(/CHECK constraint failed: slot IN \(1, 2\)/);
   });
 
   it('rejects a second task in an occupied slot', () => {
@@ -213,7 +213,7 @@ describe('tasks', () => {
 
   it('only accepts the seven statuses', () => {
     insertTask('t1');
-    expect(() => db.prepare("UPDATE tasks SET status = 'someday' WHERE id = 't1'").run()).toThrow(/CHECK constraint failed/);
+    expect(() => db.prepare("UPDATE tasks SET status = 'someday' WHERE id = 't1'").run()).toThrow(/CHECK constraint failed: status IN \('inbox'/);
   });
 });
 
@@ -227,7 +227,69 @@ describe('deep_work_blocks', () => {
       .run(id, startedAt, endedAt, NOW, NOW);
 
   it('cannot end before it has started', () => {
-    expect(() => insertBlock('b1', null, NOW)).toThrow(/CHECK constraint failed/);
+    expect(() => insertBlock('b1', null, NOW)).toThrow(/CHECK constraint failed: ended_at IS NULL OR started_at IS NOT NULL/);
     expect(() => insertBlock('b2', NOW, NOW)).not.toThrow();
+  });
+});
+
+describe('the constraints no product limit covers', () => {
+  const insertProject = (id: string, context: string, status = 'active') =>
+    db
+      .prepare('INSERT INTO projects (id, name, context, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(id, 'Project', context, status, NOW, NOW);
+
+  it('keeps a week start date unique', () => {
+    insertWeek('w1', '2026-09-20');
+    expect(() => insertWeek('w2', '2026-09-20')).toThrow(/UNIQUE constraint failed: weeks.start_date/);
+  });
+
+  it('limits a project to the two contexts and three statuses', () => {
+    expect(() => insertProject('p1', 'home')).toThrow(/CHECK constraint failed: context IN \('work', 'build'\)/);
+    expect(() => insertProject('p2', 'work', 'paused')).toThrow(/CHECK constraint failed: status IN \('active', 'done', 'archived'\)/);
+    expect(() => insertProject('p3', 'build')).not.toThrow();
+  });
+
+  it('limits an outcome to the four categories and the review code lists', () => {
+    insertWeek();
+    expect(() =>
+      db
+        .prepare(`INSERT INTO outcomes (id, week_id, slot, title, category, created_at, updated_at) VALUES ('o1', 'w1', 1, 'O', 'hobby', ?, ?)`)
+        .run(NOW, NOW)
+    ).toThrow(/CHECK constraint failed: category IN \(/);
+    insertOutcome('o2', 2);
+    expect(() => db.prepare("UPDATE outcomes SET review_grade = 'great' WHERE id = 'o2'").run()).toThrow(/CHECK constraint failed: review_grade IN \(/);
+    expect(() => db.prepare("UPDATE outcomes SET review_disposition = 'ignore' WHERE id = 'o2'").run()).toThrow(/CHECK constraint failed: review_disposition IN \(/);
+    expect(() => db.prepare("UPDATE outcomes SET review_grade = 'partial', review_disposition = 'reschedule' WHERE id = 'o2'").run()).not.toThrow();
+  });
+
+  it('limits a must ship to the six statuses', () => {
+    insertMustShip('m1', '2026-09-22', 'work');
+    expect(() => db.prepare("UPDATE must_ships SET status = 'almost' WHERE id = 'm1'").run()).toThrow(/CHECK constraint failed: status IN \('planned'/);
+  });
+
+  it('limits a deep work block to the two contexts and four results', () => {
+    const insert = (id: string, context: string, result: string | null) =>
+      db
+        .prepare(
+          `INSERT INTO deep_work_blocks (id, date, context, planned_start, planned_minutes, result, created_at, updated_at)
+           VALUES (?, '2026-09-22', ?, '08:35', 90, ?, ?, ?)`
+        )
+        .run(id, context, result, NOW, NOW);
+    expect(() => insert('b1', 'home', null)).toThrow(/CHECK constraint failed: context IN \('work', 'build'\)/);
+    expect(() => insert('b2', 'work', 'meh')).toThrow(/CHECK constraint failed: result IN \(/);
+    expect(() => insert('b3', 'work', 'progress')).not.toThrow();
+  });
+
+  it('bounds the settings weekday and minutes and a block\'s planned minutes', () => {
+    expect(() => db.prepare('UPDATE settings SET week_start_day = 7 WHERE id = 1').run()).toThrow(/CHECK constraint failed: week_start_day BETWEEN 0 AND 6/);
+    expect(() => db.prepare('UPDATE settings SET deep_work_minutes = 0 WHERE id = 1').run()).toThrow(/CHECK constraint failed: deep_work_minutes > 0/);
+    expect(() =>
+      db
+        .prepare(
+          `INSERT INTO deep_work_blocks (id, date, context, planned_start, planned_minutes, created_at, updated_at)
+           VALUES ('b0', '2026-09-22', 'work', '08:35', 0, ?, ?)`
+        )
+        .run(NOW, NOW)
+    ).toThrow(/CHECK constraint failed: planned_minutes > 0/);
   });
 });

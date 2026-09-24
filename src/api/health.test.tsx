@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
-import { QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider, type QueryObserverOptions } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { createQueryClient } from './queryClient';
-import { useHealth } from './health';
+import { useHealth, healthQueryKey } from './health';
 import { healthOk } from '../test/render';
 
 const wrapper = ({ children }: { children: ReactNode }) => (
@@ -25,5 +25,16 @@ describe('useHealth', () => {
     const { result } = renderHook(() => useHealth(), { wrapper });
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.error).toMatchObject({ code: 'NETWORK' });
+  });
+
+  it('re-polls every fifteen seconds', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => healthOk()));
+    const client = createQueryClient({ retry: false });
+    const { result } = renderHook(() => useHealth(), {
+      wrapper: ({ children }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>,
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const options = client.getQueryCache().find({ queryKey: healthQueryKey })?.options as QueryObserverOptions | undefined;
+    expect(options?.refetchInterval).toBe(15_000);
   });
 });

@@ -10,6 +10,7 @@ import { useInboxKeys, type InboxAction } from '../components/inbox/useInboxKeys
 import { scheduleStatus, tomorrowFrom } from '../lib/inboxRules';
 import { toCalendarDate } from '../shared/exec/dates';
 import { localClock } from '../shared/exec/time';
+import type { ApiError } from '../api/client';
 import type { Task } from '../shared/exec/schemas';
 
 type Tab = 'inbox' | 'later';
@@ -36,15 +37,19 @@ export default function Inbox() {
   const weekStartDay = settings.data?.weekStartDay ?? 0;
   const parked = tab === 'later';
 
+  const report = (verb: string) => (error: ApiError) => toast.show(`Could not ${verb}: ${error.message}`);
+
   const act = useCallback(
     (action: InboxAction, index: number) => {
       const task = items[index];
       if (!task) return;
-      if (action === 'this_week') update.mutate({ id: task.id, patch: { status: 'this_week' } });
-      else if (action === 'later' && !parked) update.mutate({ id: task.id, patch: { status: 'later' } });
-      else if (action === 'delete') {
+      if (action === 'this_week') update.mutate({ id: task.id, patch: { status: 'this_week' } }, { onError: report('update') });
+      else if (action === 'later') {
+        if (parked) toast.show('This item is already parked.');
+        else update.mutate({ id: task.id, patch: { status: 'later' } }, { onError: report('update') });
+      } else if (action === 'delete') {
         if (parked) toast.show('Only an inbox item can be deleted.');
-        else remove.mutate(task.id);
+        else remove.mutate(task.id, { onError: report('delete') });
       } else if (action === 'delegate' || action === 'schedule' || action === 'project') setPanel({ kind: action, task });
     },
     [items, parked, update, remove, toast]
@@ -53,7 +58,7 @@ export default function Inbox() {
   const { selected, setSelected } = useInboxKeys(items.length, act, panel === null);
   const close = () => setPanel(null);
   const patchAndClose = (id: string, patch: Parameters<typeof update.mutate>[0]['patch']) =>
-    update.mutate({ id, patch }, { onSuccess: close });
+    update.mutate({ id, patch }, { onSuccess: close, onError: report('update') });
 
   return (
     <section className="mx-auto max-w-3xl space-y-6">

@@ -5,5 +5,9 @@ import { api, ApiError } from './client';
 export const healthQueryKey = ['exec', 'health'] as const;
 
 export function useHealth() {
-  return useQuery<Health, ApiError>({ queryKey: healthQueryKey, queryFn: () => api.get<Health>('/health') });
+  return useQuery<Health, ApiError>({
+    queryKey: healthQueryKey,
+    queryFn: () => api.get<Health>('/health'),
+    refetchInterval: 15_000,
+  });
 }

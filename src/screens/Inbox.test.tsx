@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderRoute } from '../test/render';
-import { stubFetch, json } from '../test/fetch';
+import { stubFetch, json, failure } from '../test/fetch';
 import { SETTINGS, makeTask } from '../test/fixtures';
 import type { Project, Task } from '../shared/exec/schemas';
 
@@ -28,6 +28,24 @@ function fakeApi(initial: Task[], projects: Project[] = []) {
     return json(store.find((task) => task.id === id));
   });
   return { calls, current: () => store };
+}
+
+/** A fake /api/exec whose PATCH always fails, to check that write failures are reported. */
+function fakeApiFailingPatch(initial: Task[]) {
+  return {
+    calls: stubFetch((url, init) => {
+      const method = init?.method ?? 'GET';
+      const parsed = new URL(url, 'http://local');
+      if (parsed.pathname.endsWith('/settings')) return json(SETTINGS);
+      if (parsed.pathname.endsWith('/projects')) return json([]);
+      if (method === 'GET') {
+        const statuses = (parsed.searchParams.get('status') ?? '').split(',');
+        return json(initial.filter((task) => statuses.includes(task.status)));
+      }
+      if (method === 'PATCH') return failure(500, 'INTERNAL', 'internal server error');
+      return json(initial[0]);
+    }),
+  };
 }
 
 const rows = () => within(screen.getByRole('listbox')).getAllByRole('option');
@@ -62,6 +80,15 @@ describe('/inbox', () => {
     await waitFor(() => expect(screen.getByText('1 to process')).toBeInTheDocument());
     expect(patches(api.calls)[0]).toMatchObject({ url: `/api/exec/tasks/${api.current()[0].id}`, body: { status: 'this_week' } });
     expect(rows().map((row) => row.textContent)).toEqual([expect.stringContaining('B')]);
+  });
+
+  it('a server failure on a key is reported, not swallowed', async () => {
+    fakeApiFailingPatch([makeTask({ title: 'Stubborn' })]);
+    renderRoute('/inbox');
+    await screen.findByText('1 to process');
+    await userEvent.keyboard('t');
+    expect(await screen.findByRole('status')).toHaveTextContent('Could not update: internal server error');
+    expect(screen.getByText('1 to process')).toBeInTheDocument();
   });
 
   it('j moves the selection down and L parks that row for later', async () => {
@@ -106,6 +133,19 @@ describe('/inbox', () => {
       followUpDate: '2026-09-23',
     });
     await waitFor(() => expect(screen.getByText('Inbox zero.')).toBeInTheDocument());
+  });
+
+  it('a cleared follow-up date is refused', async () => {
+    const api = fakeApi([makeTask({ title: 'Send the tracker' })]);
+    renderRoute('/inbox');
+    await screen.findByText('1 to process');
+    await userEvent.keyboard('d');
+    const form = await screen.findByRole('form', { name: 'Delegate Send the tracker' });
+    await userEvent.type(within(form).getByLabelText('Owner'), 'Bilal');
+    await userEvent.clear(within(form).getByLabelText('Follow up on'));
+    await userEvent.click(within(form).getByRole('button', { name: 'Delegate' }));
+    expect(within(form).getByRole('alert')).toHaveTextContent('Follow-up date is required');
+    expect(patches(api.calls)).toHaveLength(0);
   });
 
   it('typing in a panel never triggers the list keys', async () => {
@@ -175,6 +215,16 @@ describe('/inbox', () => {
     await userEvent.keyboard('x');
     expect(await screen.findByRole('status')).toHaveTextContent('Only an inbox item can be deleted.');
     expect(api.calls.filter((c) => c.method === 'DELETE')).toHaveLength(0);
+  });
+
+  it('L on the Later tab explains itself', async () => {
+    fakeApi([makeTask({ title: 'Parked', status: 'later' })]);
+    renderRoute('/inbox');
+    await screen.findByText('Inbox zero.');
+    await userEvent.click(screen.getByRole('tab', { name: 'Later' }));
+    await screen.findByText('1 parked');
+    await userEvent.keyboard('l');
+    expect(await screen.findByRole('status')).toHaveTextContent('This item is already parked.');
   });
 
   it('the row buttons do what the keys do', async () => {

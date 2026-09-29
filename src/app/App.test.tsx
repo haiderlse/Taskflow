@@ -1,15 +1,17 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, within } from '@testing-library/react';
 import { renderRoute, healthOk } from '../test/render';
+import { SETTINGS } from '../test/fixtures';
+import { json } from '../test/fetch';
 
-beforeEach(() => vi.stubGlobal('fetch', vi.fn(async () => healthOk())));
+beforeEach(() => vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => (String(input).endsWith('/settings') ? json(SETTINGS) : healthOk()))));
 afterEach(() => vi.unstubAllGlobals());
 
 describe('the app shell', () => {
   it('opens on Today with the first-week banner', async () => {
     renderRoute('/');
     expect(await screen.findByRole('heading', { level: 1, name: 'Today' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /plan your first week/i })).toHaveAttribute('href', '/plan');
+    expect(await screen.findByRole('link', { name: /plan your first week/i })).toHaveAttribute('href', '/plan');
   });
 
   it('offers exactly the five primary destinations, in order', async () => {

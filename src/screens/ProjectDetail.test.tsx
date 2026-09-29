@@ -3,7 +3,7 @@ import { screen, waitFor, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderRoute } from '../test/render';
 import { stubFetch, json, failure } from '../test/fetch';
-import { SETTINGS, makeOutcome, makeProjectSummary, makeTask } from '../test/fixtures';
+import { SETTINGS, makeOutcome, makeMustShip, makeProjectSummary, makeTask } from '../test/fixtures';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -11,7 +11,9 @@ describe('/projects/:id', () => {
   it('shows the project with its outcomes by week and open tasks, and saves status and notes', async () => {
     const project = makeProjectSummary({ name: 'Supply plan', notes: 'Top 20 suppliers' });
     const detail = { project, outcomes: [{ ...makeOutcome({ title: 'Delivery plan confirmed' }), weekStartDate: '2026-09-20' }], tasks: [makeTask({ title: 'Call supplier' })] };
-    const calls = stubFetch((url, init) => (url.endsWith('/settings') ? json(SETTINGS) : init?.method === 'PATCH' ? json(project) : json(detail)));
+    const calls = stubFetch((url, init) =>
+      url.endsWith('/settings') ? json(SETTINGS) : url.includes('/must-ships') ? json([]) : init?.method === 'PATCH' ? json(project) : json(detail)
+    );
     renderRoute(`/projects/${project.id}`);
     expect(await screen.findByRole('heading', { level: 1, name: 'Supply plan' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'All projects' })).toHaveAttribute('href', '/projects');
@@ -40,5 +42,28 @@ describe('/projects/:id', () => {
     expect(await screen.findByText('Could not load the project: internal server error')).toBeInTheDocument();
     expect(screen.queryByText('That project does not exist.')).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'All projects' })).toHaveAttribute('href', '/projects');
+  });
+
+  it('lists Must Ship candidates and adds one to the project', async () => {
+    const project = makeProjectSummary({ name: 'Supply plan' });
+    const detail = { project, outcomes: [], tasks: [] };
+    const calls = stubFetch((url, init) =>
+      url.endsWith('/settings')
+        ? json(SETTINGS)
+        : init?.method === 'POST'
+          ? json(makeMustShip(), 201)
+          : url.includes('/must-ships')
+            ? json([makeMustShip({ title: 'Price list approved', date: null, projectId: project.id })])
+            : json(detail)
+    );
+    renderRoute(`/projects/${project.id}`);
+    const region = await screen.findByRole('region', { name: 'Must Ship candidates' });
+    expect(await within(region).findByText('Price list approved')).toBeInTheDocument();
+    expect(calls.find((c) => c.url.includes('/must-ships'))?.url).toBe(`/api/exec/must-ships?date=none&status=planned&project=${project.id}`);
+    await userEvent.type(within(region).getByLabelText('Must Ship'), 'Delivery tracker sent');
+    await userEvent.click(within(region).getByRole('button', { name: 'Add candidate' }));
+    await waitFor(() =>
+      expect(calls.find((c) => c.method === 'POST')?.body).toEqual({ title: 'Delivery tracker sent', definitionOfDone: '', outcomeId: null, context: 'work', date: null, projectId: project.id })
+    );
   });
 });

@@ -31,4 +31,10 @@ describe('/projects', () => {
     await waitFor(() => expect(calls.find((c) => c.method === 'POST')).toMatchObject({ url: '/api/exec/projects', body: { name: 'Healify launch', context: 'build' } }));
     await waitFor(() => expect(screen.getByRole('textbox', { name: 'Project name' })).toHaveValue(''));
   });
+
+  it('counts Must Ship candidates beside a project', async () => {
+    stubFetch((url) => (url.endsWith('/settings') ? json(SETTINGS) : json([makeProjectSummary({ name: 'Supply plan', mustShipCandidates: 2 })])));
+    renderRoute('/projects');
+    expect(await screen.findByRole('region', { name: 'Work' })).toHaveTextContent('0 outcomes · 0 open tasks · 2 candidates');
+  });
 });

@@ -5,6 +5,7 @@ import { createProject, getProjectDetail, listProjectSummaries, patchProject } f
 import { ensureWeek } from '../weeks/store';
 import { addOutcome, patchOutcome } from '../outcomes/store';
 import { createTask, patchTask } from '../tasks/store';
+import { createMustShip } from '../mustShips/store';
 
 const T0 = '2026-09-22T03:00:00.000Z';
 const T1 = '2026-09-22T03:05:00.000Z';
@@ -67,5 +68,17 @@ describe('projects store', () => {
     ]);
     expect(detail?.tasks.map((t) => t.title)).toEqual(['Call supplier']);
     expect(getProjectDetail(db, 'missing')).toBeNull();
+  });
+});
+
+describe('Must Ship candidates on projects', () => {
+  it('counts planned, undated Must Ships linked to each project', () => {
+    const project = createProject(db, { name: 'Supply plan', context: 'work', notes: '' }, T0);
+    const base = { context: 'work' as const, definitionOfDone: '', outcomeId: null, projectId: project.id, notes: '' };
+    createMustShip(db, { ...base, title: 'Candidate', date: null }, T0);
+    createMustShip(db, { ...base, title: 'Dated', date: '2026-09-29' }, T0);
+    const shipped = createMustShip(db, { ...base, title: 'Old', date: null }, T0);
+    db.prepare("UPDATE must_ships SET status = 'shipped' WHERE id = ?").run(shipped.id);
+    expect(listProjectSummaries(db).find((summary) => summary.id === project.id)?.mustShipCandidates).toBe(1);
   });
 });

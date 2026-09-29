@@ -3,6 +3,7 @@ import { OUTCOME_CATEGORIES, type OutcomeCategory, type OutcomeInput } from '../
 import { isActivityTitle, needsNudge } from '../../shared/exec/nudge';
 import { CATEGORY_LABELS } from '../../lib/labels';
 import { useProjects } from '../../api/projects';
+import { contextOf } from '../../shared/exec/week';
 import { NudgeLine } from './NudgeLine';
 
 type Props = {
@@ -37,7 +38,9 @@ function useOutcomeFields(initial: Partial<OutcomeInput>, defaultTargetDate: str
 export function OutcomeForm({ initial = {}, defaultTargetDate, submitLabel, requireDefinition = false, pending = false, onSubmit, onCancel }: Props) {
   const id = useId();
   const f = useOutcomeFields(initial, defaultTargetDate);
-  const projects = (useProjects().data ?? []).filter((project) => project.status === 'active');
+  const projects = (useProjects().data ?? []).filter(
+    (project) => project.status === 'active' && (project.context === contextOf(f.category) || project.id === f.projectId)
+  );
   const definitionRef = useRef<HTMLTextAreaElement>(null);
   const blocked = f.value.title === '' || (requireDefinition && f.value.definitionOfDone === '');
   const submit = (event: FormEvent) => {

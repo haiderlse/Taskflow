@@ -41,6 +41,7 @@ function Group({ label, projects }: { label: 'Work' | 'Build'; projects: Project
             <span className="text-sm text-ink-muted">
               {project.status !== 'active' && `${PROJECT_STATUS_LABELS[project.status]} · `}
               {plural(project.activeOutcomes, 'outcome')} · {plural(project.openTasks, 'open task')}
+              {project.mustShipCandidates > 0 && ` · ${plural(project.mustShipCandidates, 'candidate')}`}
             </span>
           </li>
         ))}

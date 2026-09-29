@@ -100,6 +100,7 @@ export function makeProjectSummary(overrides: Partial<ProjectSummary> = {}): Pro
     updatedAt: STAMP,
     activeOutcomes: 0,
     openTasks: 0,
+    mustShipCandidates: 0,
     ...overrides,
   };
 }

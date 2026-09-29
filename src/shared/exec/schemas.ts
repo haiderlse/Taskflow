@@ -250,6 +250,7 @@ export type ProjectPatch = z.infer<typeof projectPatchSchema>;
 export const projectSummarySchema = projectSchema.extend({
   activeOutcomes: z.number().int().nonnegative(),
   openTasks: z.number().int().nonnegative(),
+  mustShipCandidates: z.number().int().nonnegative(),
 });
 export type ProjectSummary = z.infer<typeof projectSummarySchema>;
 

@@ -71,3 +71,15 @@ describe('OutcomeForm', () => {
     expect(screen.getByLabelText('Definition of done')).not.toHaveFocus();
   });
 });
+
+describe('OutcomeForm project context', () => {
+  it('offers projects of the outcome\'s context and follows a category change', async () => {
+    stubFetch(() => json([makeProjectSummary({ name: 'Supply plan', context: 'work' }), makeProjectSummary({ name: 'Pinkbox', context: 'build' })]));
+    renderWithProviders(<OutcomeForm defaultTargetDate="2026-09-25" submitLabel="Add outcome" onSubmit={vi.fn()} />);
+    expect(await screen.findByRole('option', { name: 'Supply plan' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Pinkbox' })).toBeNull();
+    await userEvent.selectOptions(screen.getByLabelText('Category'), 'Business');
+    expect(screen.getByRole('option', { name: 'Pinkbox' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Supply plan' })).toBeNull();
+  });
+});

@@ -6,7 +6,7 @@ import { ReasonSelect } from './ReasonSelect';
 
 /** Lets the card react to how a save ended: close the edit form on success, undo local state on failure. */
 export type UpdateOptions = { onSuccess?: () => void; onError?: () => void };
-type Props = { outcome: Outcome; onUpdate: (patch: OutcomePatch, options?: UpdateOptions) => void; onKill: (reason: ReviewReason) => void };
+type Props = { outcome: Outcome; onUpdate: (patch: OutcomePatch, options?: UpdateOptions) => void; onKill: (reason: ReviewReason) => void; mustShipCount?: { shipped: number; total: number } };
 
 const BUTTON = 'rounded border border-line px-2 py-1 text-xs text-ink-muted hover:text-ink dark:border-ink-muted dark:hover:text-paper';
 
@@ -24,7 +24,7 @@ function KillPrompt({ onConfirm, onCancel }: { onConfirm: (reason: ReviewReason)
 }
 
 /** One of the week's three outcomes (spec C "Week" item 2). Progress is set by hand, committed when released. */
-export function OutcomeCard({ outcome, onUpdate, onKill }: Props) {
+export function OutcomeCard({ outcome, onUpdate, onKill, mustShipCount }: Props) {
   const [mode, setMode] = useState<'view' | 'edit' | 'kill'>('view');
   const [progress, setProgress] = useState(outcome.progress);
   useEffect(() => setProgress(outcome.progress), [outcome.progress]);
@@ -62,6 +62,7 @@ export function OutcomeCard({ outcome, onUpdate, onKill }: Props) {
         </details>
       )}
       {outcome.targetDate && <p className="text-sm text-ink-muted">Target {outcome.targetDate}</p>}
+      {mustShipCount && mustShipCount.total > 0 && <p className="text-sm text-ink-muted">Must Ships shipped {mustShipCount.shipped} of {mustShipCount.total}</p>}
       {mode === 'kill' ? (
         <KillPrompt onCancel={() => setMode('view')} onConfirm={(reason) => { onKill(reason); setMode('view'); }} />
       ) : (

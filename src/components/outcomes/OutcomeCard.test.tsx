@@ -94,3 +94,14 @@ describe('OutcomeCard', () => {
     expect(slider).toHaveValue('40');
   });
 });
+
+describe('OutcomeCard Must Ship count', () => {
+  it('shows how many of its Must Ships shipped, and nothing without any', () => {
+    const outcome = makeOutcome({ title: 'Supplier plan confirmed' });
+    const { unmount } = renderWithProviders(<OutcomeCard outcome={outcome} onUpdate={vi.fn()} onKill={vi.fn()} mustShipCount={{ shipped: 1, total: 2 }} />);
+    expect(screen.getByText('Must Ships shipped 1 of 2')).toBeInTheDocument();
+    unmount();
+    renderWithProviders(<OutcomeCard outcome={outcome} onUpdate={vi.fn()} onKill={vi.fn()} />);
+    expect(screen.queryByText(/Must Ships shipped/)).toBeNull();
+  });
+});

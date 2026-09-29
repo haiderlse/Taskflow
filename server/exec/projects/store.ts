@@ -9,13 +9,14 @@ export function getProject(db: Database.Database, id: string): Project | null {
   return row ? toEntity<Project>(row) : null;
 }
 
-/** Active projects first, then done, then archived; each with its active outcomes and open tasks. */
+/** Active projects first, then done, then archived; each with its active outcomes, open tasks and Must Ship candidates. */
 export function listProjectSummaries(db: Database.Database): ProjectSummary[] {
   return db
     .prepare(
       `SELECT p.*,
          (SELECT COUNT(*) FROM outcomes o WHERE o.project_id = p.id AND o.status = 'active') AS active_outcomes,
-         (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status IN (${placeholders(OPEN_STATUSES.length)})) AS open_tasks
+         (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status IN (${placeholders(OPEN_STATUSES.length)})) AS open_tasks,
+         (SELECT COUNT(*) FROM must_ships m WHERE m.project_id = p.id AND m.date IS NULL AND m.status = 'planned') AS must_ship_candidates
        FROM projects p
        ORDER BY CASE p.status WHEN 'active' THEN 0 WHEN 'done' THEN 1 ELSE 2 END, p.name COLLATE NOCASE, p.id`
     )

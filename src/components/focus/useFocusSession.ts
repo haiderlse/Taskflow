@@ -17,7 +17,7 @@ export type FocusState =
 
 /**
  * Opening /focus starts or resumes today's block (spec C "Deep Work"). The plan is pure (`planFocus`); this
- * hook only executes a `start` plan, once: a ref guards the effect against StrictMode's double run and a
+ * hook only executes a `start` plan, once, and only when the first plan this mount resolves is `start`: a ref guards the effect against StrictMode's double run and a
  * re-render, and a failure is kept until the person retries.
  */
 export function useFocusSession(): FocusState {
@@ -29,10 +29,15 @@ export function useFocusSession(): FocusState {
   const attempted = useRef(false);
   const [failure, setFailure] = useState<ApiError | null>(null);
   const plan = settings && day.data ? planFocus(now, settings, day.data) : null;
-  const wantsStart = plan?.kind === 'start';
+  const kind = plan?.kind ?? null;
 
   useEffect(() => {
-    if (!plan || plan.kind !== 'start' || !settings || attempted.current || failure) return;
+    if (!plan || !settings || attempted.current || failure) return;
+    if (plan.kind !== 'start') {
+      // The first plan this mount resolves was not a start (a resumed or closed session): never auto-start after it ends.
+      attempted.current = true;
+      return;
+    }
     attempted.current = true;
     const { context, block } = plan;
     void (async () => {
@@ -43,7 +48,7 @@ export function useFocusSession(): FocusState {
         setFailure(error as ApiError);
       }
     })();
-  }, [wantsStart, failure]);
+  }, [kind, failure]);
 
   const retry = () => {
     attempted.current = false;

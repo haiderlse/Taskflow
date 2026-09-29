@@ -3,6 +3,7 @@ import { StrictMode, type ReactNode } from 'react';
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { createQueryClient } from '../../api/queryClient';
+import { daysKey } from '../../api/keys';
 import { useFocusSession } from './useFocusSession';
 import { stubFetch, json, failure } from '../../test/fetch';
 import { SETTINGS, makeBlock, makeDayView, makeMustShip } from '../../test/fixtures';
@@ -74,6 +75,29 @@ describe('useFocusSession', () => {
     expect(created).toHaveLength(1);
     expect(created[0].body).toEqual({ date: DATE, context: 'work', plannedStart: '09:00', plannedMinutes: 90, outcomeId: null, mustShipId: null });
     expect(writes(calls).filter((write) => write.endsWith('/start'))).toHaveLength(1);
+  });
+
+  it('does not start a new block when a resumed session is finished and the Must Ship is still planned', async () => {
+    const live = makeBlock({ mustShipId: ship.id, startedAt: '2026-09-29T03:40:00.000Z' });
+    let day = makeDayView({ mustShip: ship, blocks: [live] });
+    const calls = stubFetch((url) => (url.endsWith('/settings') ? json(SETTINGS) : url === `/api/exec/days/${DATE}` ? json(day) : json({})));
+    const client = createQueryClient({ retry: false });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <StrictMode>
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      </StrictMode>
+    );
+    const { result } = renderHook(() => useFocusSession(), { wrapper });
+    await waitFor(() => expect(result.current.kind).toBe('live'));
+    day = makeDayView({ mustShip: ship, blocks: [{ ...live, endedAt: '2026-09-29T04:00:00.000Z', result: 'progress' }] });
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: daysKey });
+    });
+    await waitFor(() => expect(result.current.kind).toBe('starting'));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(writes(calls)).toEqual([]);
   });
 
   it('starts a planned, unstarted block without creating another', async () => {

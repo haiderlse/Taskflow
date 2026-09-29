@@ -39,6 +39,7 @@ export function WeekSlots({ view, today, weekStartDate }: Props) {
   const [pending, setPending] = useState<PendingReplace | null>(null);
   const slotted = (view?.outcomes ?? []).filter((outcome) => outcome.slot !== null);
   const full = slotted.length === 3;
+  const replaceable = slotted.filter((outcome) => outcome.status === 'active');
 
   const send = (input: OutcomeInput, replace?: { outcomeId: string; reason: ReviewReason }) =>
     add.mutate(
@@ -46,8 +47,8 @@ export function WeekSlots({ view, today, weekStartDate }: Props) {
       {
         onSuccess: () => { setAdding(false); setPending(null); },
         onError: (error) => {
-          const outcomes = weekFullOutcomes(error);
-          if (outcomes) setPending({ input, outcomes });
+          const outcomes = weekFullOutcomes(error)?.filter((outcome) => outcome.status === 'active');
+          if (outcomes?.length) setPending({ input, outcomes });
           else report('add the outcome')(error);
         },
       }
@@ -64,8 +65,10 @@ export function WeekSlots({ view, today, weekStartDate }: Props) {
           submitLabel={full ? 'Choose what it replaces' : 'Add outcome'}
           pending={add.isPending}
           onCancel={() => setAdding(false)}
-          onSubmit={(input) => (full ? setPending({ input, outcomes: slotted }) : send(input))}
+          onSubmit={(input) => (full ? setPending({ input, outcomes: replaceable }) : send(input))}
         />
+      ) : full && replaceable.length === 0 ? (
+        <p className="text-sm text-ink-muted">All three outcomes are done.</p>
       ) : (
         <button type="button" onClick={() => setAdding(true)} className="rounded border border-line px-3 py-1.5 text-sm dark:border-ink-muted">
           {full ? 'Replace an outcome' : 'Add an outcome'}

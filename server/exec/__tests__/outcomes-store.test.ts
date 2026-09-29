@@ -72,6 +72,27 @@ describe('addOutcome', () => {
   });
 });
 
+describe('a finished outcome', () => {
+  it('cannot be killed by a patch, and nothing changes', () => {
+    const [a] = fill('A');
+    patchOutcome(db, a.id, { status: 'done' }, T1);
+    expect(() => patchOutcome(db, a.id, { status: 'killed', reviewReason: 'other' }, T1)).toThrow(
+      'a finished outcome keeps its slot; reopen it first'
+    );
+    expect(getOutcome(db, a.id)).toMatchObject({ status: 'done', slot: 1, reviewReason: null });
+  });
+
+  it('cannot be the target of a replace, and the new outcome is not added', () => {
+    const [, b] = fill('A', 'B', 'C');
+    patchOutcome(db, b.id, { status: 'done' }, T1);
+    expect(() => addOutcome(db, weekId, input('D', { replace: { outcomeId: b.id, reason: 'other' } }), T1)).toThrow(
+      'a finished outcome keeps its slot'
+    );
+    expect(getOutcome(db, b.id)).toMatchObject({ status: 'done', slot: 2 });
+    expect(db.prepare('SELECT COUNT(*) AS n FROM outcomes').get()).toEqual({ n: 3 });
+  });
+});
+
 describe('patchOutcome', () => {
   it('edits fields and returns null for an unknown id', () => {
     const [a] = fill('A');

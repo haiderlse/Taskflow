@@ -105,9 +105,25 @@ describe('/api/exec/outcomes', () => {
     const id = (await add(weekId, outcome('A'))).body.data.id;
     expect((await request(app).patch(`/api/exec/outcomes/${id}`).send({ progress: 60 })).body.data.progress).toBe(60);
     expect((await request(app).patch(`/api/exec/outcomes/${id}`).send({ status: 'done' })).body.data).toMatchObject({ status: 'done', progress: 100 });
+    await request(app).patch(`/api/exec/outcomes/${id}`).send({ status: 'active' });
     await request(app).patch(`/api/exec/outcomes/${id}`).send({ status: 'killed' });
     const reopen = await request(app).patch(`/api/exec/outcomes/${id}`).send({ status: 'active' });
     expect(reopen.body).toEqual({ success: false, error: 'a killed outcome cannot be reopened; add it again', code: 'VALIDATION' });
+  });
+
+  it('refuses to kill a done outcome, by patch or as a replace target, and changes nothing', async () => {
+    const weekId = await ensure();
+    const ids: string[] = [];
+    for (const title of ['A', 'B', 'C']) ids.push((await add(weekId, outcome(title))).body.data.id);
+    await request(app).patch(`/api/exec/outcomes/${ids[1]}`).send({ status: 'done' });
+    const killed = await request(app).patch(`/api/exec/outcomes/${ids[1]}`).send({ status: 'killed', reviewReason: 'other' });
+    expect(killed.status).toBe(400);
+    expect(killed.body).toEqual({ success: false, error: 'a finished outcome keeps its slot; reopen it first', code: 'VALIDATION' });
+    const before = (await request(app).get(`/api/exec/weeks/${weekId}`)).body.data;
+    const replaced = await add(weekId, { ...outcome('D'), replace: { outcomeId: ids[1], reason: 'other' } });
+    expect(replaced.status).toBe(400);
+    expect(replaced.body).toEqual({ success: false, error: 'a finished outcome keeps its slot', code: 'VALIDATION' });
+    expect((await request(app).get(`/api/exec/weeks/${weekId}`)).body.data).toEqual(before);
   });
 
   it('answers 404 for an unknown outcome and 400 for an empty or slot patch', async () => {

@@ -33,6 +33,7 @@ function killForReplace(db: Database.Database, weekId: string, replace: Replace,
   if (!target || target.weekId !== weekId || target.slot === null) {
     throw new ApiError(400, 'VALIDATION', 'the outcome to replace is not in this week');
   }
+  if (target.status === 'done') throw new ApiError(400, 'VALIDATION', 'a finished outcome keeps its slot');
   updateRow(db, 'outcomes', target.id, { status: 'killed', slot: null, reviewReason: replace.reason, closedAt: now, updatedAt: now });
 }
 
@@ -72,6 +73,9 @@ export function patchOutcome(db: Database.Database, id: string, patch: OutcomePa
   const to = patch.status ?? current.status;
   if (current.status === 'killed' && to !== 'killed') {
     throw new ApiError(400, 'VALIDATION', 'a killed outcome cannot be reopened; add it again');
+  }
+  if (current.status === 'done' && to === 'killed') {
+    throw new ApiError(400, 'VALIDATION', 'a finished outcome keeps its slot; reopen it first');
   }
   const doneProgress = to === 'done' ? { progress: 100 } : {};
   updateRow(db, 'outcomes', id, { ...patch, ...statusFields(current.status, to, now), ...doneProgress, updatedAt: now });

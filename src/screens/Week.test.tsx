@@ -74,6 +74,38 @@ describe('/week', () => {
     });
   });
 
+  it('lists only active outcomes in the replace picker when one is done', async () => {
+    const outcomes = three();
+    outcomes[1] = makeOutcome({ title: 'B', slot: 2, status: 'done', progress: 100 });
+    api(makeLookup({ current: makeWeekView(outcomes) }));
+    renderRoute('/week');
+    await userEvent.click(await screen.findByRole('button', { name: 'Replace an outcome' }));
+    await userEvent.type(screen.getByLabelText('Outcome'), 'D');
+    await userEvent.click(screen.getByRole('button', { name: 'Choose what it replaces' }));
+    const picker = screen.getByRole('form', { name: 'Replace an outcome' });
+    expect(within(picker).getAllByRole('radio').map((r) => r.closest('label')?.textContent)).toEqual(['A', 'C']);
+  });
+
+  it('offers only active outcomes when the server refuses a fourth', async () => {
+    const outcomes = three();
+    outcomes[0] = makeOutcome({ title: 'A', slot: 1, status: 'done', progress: 100 });
+    api(makeLookup({ current: makeWeekView(outcomes.slice(0, 2)) }), () => weekFull(outcomes));
+    renderRoute('/week');
+    await userEvent.click(await screen.findByRole('button', { name: 'Add an outcome' }));
+    await userEvent.type(screen.getByLabelText('Outcome'), 'D');
+    await userEvent.click(screen.getByRole('button', { name: 'Add outcome' }));
+    const picker = await screen.findByRole('form', { name: 'Replace an outcome' });
+    expect(within(picker).getAllByRole('radio').map((r) => r.closest('label')?.textContent)).toEqual(['B', 'C']);
+  });
+
+  it('says all three are done instead of offering a replace', async () => {
+    const outcomes = three().map((o) => ({ ...o, status: 'done' as const, progress: 100 }));
+    api(makeLookup({ current: makeWeekView(outcomes) }));
+    renderRoute('/week');
+    expect(await screen.findByText('All three outcomes are done.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Replace an outcome' })).not.toBeInTheDocument();
+  });
+
   it('shows the replace prompt when the server refuses a fourth the screen did not know about', async () => {
     const outcomes = three();
     api(makeLookup({ current: makeWeekView(outcomes.slice(0, 2)) }), () => weekFull(outcomes));

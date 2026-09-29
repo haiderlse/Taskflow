@@ -48,6 +48,12 @@ describe('OutcomeCard', () => {
     expect(onUpdate).toHaveBeenCalledWith({ status: 'active' });
   });
 
+  it('offers no Kill on a finished outcome, only Reopen', () => {
+    renderCard({ status: 'done', progress: 100 });
+    expect(screen.queryByRole('button', { name: 'Kill' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reopen' })).toBeInTheDocument();
+  });
+
   it('kills with a reason', async () => {
     const { onKill } = renderCard();
     await userEvent.click(screen.getByRole('button', { name: 'Kill' }));

@@ -64,7 +64,7 @@ export function OutcomeCard({ outcome, onUpdate, onKill }: Props) {
         <div className="flex gap-2 pt-1">
           <button type="button" className={BUTTON} onClick={() => onUpdate({ status: done ? 'active' : 'done' })}>{done ? 'Reopen' : 'Mark done'}</button>
           <button type="button" className={BUTTON} onClick={() => setMode('edit')}>Edit</button>
-          <button type="button" className={BUTTON} onClick={() => setMode('kill')}>Kill</button>
+          {!done && <button type="button" className={BUTTON} onClick={() => setMode('kill')}>Kill</button>}
         </div>
       )}
     </article>

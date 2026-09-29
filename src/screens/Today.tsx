@@ -6,6 +6,7 @@ import { Banners } from '../components/today/Banners';
 import { PrimaryCard } from '../components/today/PrimaryCard';
 import { Secondaries } from '../components/today/Secondaries';
 import { Waiting } from '../components/today/Waiting';
+import { NoticePrompt } from '../components/today/NoticePrompt';
 import { useDay } from '../api/days';
 import { useSettings } from '../api/settings';
 import { useToday } from '../lib/useToday';
@@ -33,6 +34,7 @@ export default function Today() {
           <PrimaryCard mode={mode} view={loaded.view} settings={loaded.settings} tomorrow={tomorrow.isSuccess ? { date: next, mustShip: tomorrow.data.mustShip } : null} />
           <Secondaries date={loaded.view.date} secondaries={loaded.view.secondaries} />
           <Waiting today={loaded.view.date} workDays={loaded.settings.workDays} waiting={loaded.view.waiting} />
+          <NoticePrompt />
         </>
       )}
       <div className="sticky bottom-20 pt-6 md:bottom-6">

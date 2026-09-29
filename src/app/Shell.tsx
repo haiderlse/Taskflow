@@ -1,6 +1,8 @@
 import { Link, NavLink, Outlet } from 'react-router-dom';
 import { ApiStatus } from '../components/ApiStatus';
 import { CaptureShortcut } from '../components/CaptureShortcut';
+import { FocusShortcut } from '../components/FocusShortcut';
+import { useDeepWorkNotice } from '../lib/useDeepWorkNotice';
 
 const NAV = [
   { to: '/', label: 'Today', end: true },
@@ -15,6 +17,7 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
 
 /** The five-entry navigation: a left rail on desktop, a bottom bar on phones. */
 export function Shell() {
+  useDeepWorkNotice();
   return (
     <div className="min-h-screen md:flex">
       <nav
@@ -33,6 +36,7 @@ export function Shell() {
         </div>
         <ApiStatus />
         <CaptureShortcut />
+        <FocusShortcut />
         <Outlet />
       </main>
     </div>

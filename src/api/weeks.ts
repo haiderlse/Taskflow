@@ -9,10 +9,12 @@ export const weeksKey = ['exec', 'weeks'] as const;
 export type AddOutcomeVariables = { date: string; weekId?: string; input: OutcomeInput };
 export type RollOutcomeVariables = { id: string; date: string; weekId?: string };
 
-export function useWeekLookup(date: string) {
+/** Pass `enabled: false` until the date is trustworthy (settings loaded), so the wrong week is never looked up. */
+export function useWeekLookup(date: string, { enabled = true }: { enabled?: boolean } = {}) {
   return useQuery<WeekLookup, ApiError>({
     queryKey: [...weeksKey, 'lookup', date],
     queryFn: () => api.get<WeekLookup>(`/weeks${toQueryString({ date })}`),
+    enabled,
   });
 }
 

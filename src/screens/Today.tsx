@@ -35,8 +35,8 @@ function ThisWeek({ outcomes }: { outcomes: Outcome[] }) {
 
 /** Phase 3: the week's outcomes or the invitation to plan them, with capture pinned below. Phase 4 adds the Must Ship. */
 export default function Today() {
-  const { today } = useToday();
-  const lookup = useWeekLookup(today);
+  const { today, ready } = useToday();
+  const lookup = useWeekLookup(today, { enabled: ready });
   const outcomes = (lookup.data?.current?.outcomes ?? []).filter((outcome) => outcome.slot !== null);
   return (
     <ScreenShell title="Today">

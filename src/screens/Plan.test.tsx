@@ -50,7 +50,7 @@ describe('/plan', () => {
     const calls = fakePlanApi(makeLookup());
     renderRoute('/plan');
     expect(await screen.findByText('Week 39 · 20–26 Sep')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 2, name: "This week's outcomes" })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 2, name: "This week's outcomes" })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Last week' })).toBeNull();
 
     await userEvent.type(screen.getByLabelText('Outcome'), 'Work on supplier meetings');

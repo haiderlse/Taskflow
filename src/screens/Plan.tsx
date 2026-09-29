@@ -26,8 +26,8 @@ function Planned({ startDate, outcomes }: { startDate: string; outcomes: Outcome
 
 /** Sunday planning (spec C, §4): steps 1, 2 and 4. Step 3, assigning deep-work blocks, arrives with the blocks. */
 export default function Plan() {
-  const { today, weekStartDay } = useToday();
-  const lookup = useWeekLookup(today);
+  const { today, weekStartDay, ready } = useToday();
+  const lookup = useWeekLookup(today, { enabled: ready });
   const [chosenStep, setChosenStep] = useState<Step | null>(null);
   const current = lookup.data?.current ?? null;
   const startDate = current?.week.startDate ?? weekStartOf(today, weekStartDay);

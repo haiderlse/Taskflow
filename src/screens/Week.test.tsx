@@ -46,6 +46,23 @@ describe('/week', () => {
     expect(within(screen.getByRole('region', { name: 'Waiting on others' })).getByText(/Send tracker — Bilal/)).toBeInTheDocument();
   });
 
+  it('does not look up the week until the settings have loaded', async () => {
+    let release: (response: Response) => void = () => undefined;
+    const settings = new Promise<Response>((resolve) => { release = resolve; });
+    const calls = stubFetch((url) => {
+      if (url.endsWith('/settings')) return settings;
+      if (url.startsWith('/api/exec/weeks?')) return json(makeLookup({ current: makeWeekView(three()) }));
+      return json([]);
+    });
+    renderRoute('/week');
+    expect(screen.getByRole('heading', { name: 'Week' })).toBeInTheDocument();
+    await waitFor(() => expect(calls.some((c) => c.url.endsWith('/settings'))).toBe(true));
+    expect(calls.some((c) => c.url.startsWith('/api/exec/weeks?'))).toBe(false);
+    release(json(SETTINGS));
+    await waitFor(() => expect(calls.filter((c) => c.url.startsWith('/api/exec/weeks?'))).toHaveLength(1));
+    expect(calls.find((c) => c.url.startsWith('/api/exec/weeks?'))?.url).toBe('/api/exec/weeks?date=2026-09-22');
+  });
+
   it('offers to plan an empty week and creates the week on the first add', async () => {
     const calls = api(makeLookup(), (url) => (url === '/api/exec/weeks' ? json(makeWeekView(), 201) : json(makeOutcome(), 201)));
     renderRoute('/week');

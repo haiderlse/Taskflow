@@ -9,8 +9,8 @@ import { weekStartOf } from '../shared/exec/time';
 
 /** Spec C "Week": the three outcomes, how far they are, and what is committed or waiting. */
 export default function Week() {
-  const { today, weekStartDay } = useToday();
-  const lookup = useWeekLookup(today);
+  const { today, weekStartDay, ready } = useToday();
+  const lookup = useWeekLookup(today, { enabled: ready });
   const view = lookup.data?.current ?? null;
   const startDate = view?.week.startDate ?? weekStartOf(today, weekStartDay);
   const planned = (view?.outcomes ?? []).some((outcome) => outcome.slot !== null);

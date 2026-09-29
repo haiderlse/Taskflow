@@ -3,7 +3,7 @@ import { screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Secondaries } from './Secondaries';
 import { renderWithProviders } from '../../test/render';
-import { stubFetch, json } from '../../test/fetch';
+import { stubFetch, json, failure } from '../../test/fetch';
 import { makeTask } from '../../test/fixtures';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -32,5 +32,14 @@ describe('Secondaries', () => {
     await waitFor(() => expect(calls.find((c) => c.method === 'PATCH')).toMatchObject({ url: `/api/exec/tasks/${a.id}`, body: { status: 'done' } }));
     await userEvent.click(screen.getByRole('button', { name: 'Remove "A"' }));
     await waitFor(() => expect(calls.find((c) => c.method === 'PUT')?.body).toEqual({ taskIds: [b.id] }));
+  });
+
+  it('shows a failed read in the chooser instead of claiming there is nothing to choose', async () => {
+    stubFetch((url) => (url.includes('status=inbox') ? failure(500, 'INTERNAL', 'internal server error') : json([])));
+    renderWithProviders(<Secondaries date="2026-09-29" secondaries={[]} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Add a secondary' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not load your tasks: internal server error');
+    expect(screen.queryByText(/Nothing to choose/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
   });
 });

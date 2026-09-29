@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useSetSecondaries } from '../../api/days';
 import { useTasks, useUpdateTask } from '../../api/tasks';
 import { useReportError } from '../../api/errors';
+import { LoadError } from '../LoadError';
 import type { Task, TaskStatus } from '../../shared/exec/schemas';
 import type { Secondary } from '../../shared/exec/todaySchemas';
 
@@ -15,9 +16,18 @@ function Chooser({ date, taken, onPick, onClose }: { date: string; taken: string
   const inbox = useTasks({ status: ['inbox'] });
   const all = [...(committed.data ?? []), ...(inbox.data ?? [])];
   const choices = all.filter((task, index) => CHOOSABLE.includes(task.status) && !taken.includes(task.id) && all.findIndex((other) => other.id === task.id) === index);
+  const failed = committed.error ?? inbox.error;
+  const retry = () => {
+    void committed.refetch();
+    void inbox.refetch();
+  };
   return (
     <div className="space-y-2 rounded-lg border border-line p-3 dark:border-ink-muted">
-      {choices.length === 0 ? (
+      {failed ? (
+        <LoadError what="your tasks" error={failed} onRetry={retry} />
+      ) : !committed.isSuccess || !inbox.isSuccess ? (
+        <p className="text-sm text-ink-muted">Loading…</p>
+      ) : choices.length === 0 ? (
         <p className="text-sm text-ink-muted">Nothing to choose. Capture it, or commit it on the Week.</p>
       ) : (
         <ul aria-label="Choose a secondary" className="space-y-1">

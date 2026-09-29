@@ -42,6 +42,19 @@ it is finished. A fourth is never added: on `/week`, "Replace an outcome"
 asks which one gives up its slot, and why. Progress on each outcome is set by
 hand on `/week`. Projects live at `/projects`, work and build kept apart.
 
+## Today and the Must Ship
+
+Today shows one card for the moment. In office hours on a work day it asks
+for today's Must Ship — one output that must exist by the end of the day —
+and then offers "Start deep work". Outside office hours and on non-work days
+it shows the Build card instead. A second Must Ship for the same day is
+refused; to change it, edit it or put it back among the candidates. Up to
+two secondary tasks sit below it (there is no third), then anything delegated
+that is due for follow-up. From 17:00 a "Close the day" banner appears.
+Candidates — planned outputs with no date yet — live on each project's page.
+The schedule (work days, deep-work window, shutdown, office hours, build
+blocks) is edited at `/settings`.
+
 ## Checks
 
     npm run lint            # TypeScript, strict config (src/, server/, e2e/, root configs)

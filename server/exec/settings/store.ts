@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3';
 import { ApiError } from '../http';
 import { settingsSchema, type Settings } from '../../../src/shared/exec/schemas';
+import type { SettingsUpdate } from '../../../src/shared/exec/todaySchemas';
 
 type SettingsRow = {
   timezone: string;
@@ -41,4 +42,24 @@ export function getSettings(db: Database.Database): Settings {
   });
   if (!parsed.success) throw invalid();
   return parsed.data;
+}
+
+/** Replaces the editable schedule (spec B, PUT /settings); the time zone and week start stay as seeded. */
+export function putSettings(db: Database.Database, input: SettingsUpdate, now: string): Settings {
+  const workDays = [...input.workDays].sort((a, b) => a - b);
+  const buildBlocks = [...input.buildBlocks].sort((a, b) => a.weekday - b.weekday || a.start.localeCompare(b.start));
+  db.prepare(
+    `UPDATE settings SET work_days = ?, deep_work_start = ?, deep_work_minutes = ?, shutdown_time = ?,
+       office_start = ?, office_end = ?, build_blocks = ?, updated_at = ? WHERE id = 1`
+  ).run(
+    JSON.stringify(workDays),
+    input.deepWorkStart,
+    input.deepWorkMinutes,
+    input.shutdownTime,
+    input.officeStart,
+    input.officeEnd,
+    JSON.stringify(buildBlocks),
+    now
+  );
+  return getSettings(db);
 }

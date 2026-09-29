@@ -3,6 +3,7 @@ import type Database from 'better-sqlite3';
 import { ok, ApiError } from '../http';
 import { nowIso } from '../clock';
 import { taskCreateSchema, taskPatchSchema, taskRollSchema, taskListQuerySchema } from '../../../src/shared/exec/schemas';
+import { getSettings } from '../settings/store';
 import { listTasks, createTask, patchTask, rollTask, deleteTask } from '../tasks/store';
 
 /** Parses, calls the store, answers in the envelope. Every thrown error reaches execErrorHandler. */
@@ -11,7 +12,7 @@ export function tasksRouter(db: Database.Database, clock: () => string = nowIso)
   const notFound = () => new ApiError(404, 'NOT_FOUND', 'no such task');
 
   router.get('/', (req, res) => {
-    ok(res, listTasks(db, taskListQuerySchema.parse(req.query)));
+    ok(res, listTasks(db, taskListQuerySchema.parse(req.query), getSettings(db).weekStartDay));
   });
 
   router.post('/', (req, res) => {

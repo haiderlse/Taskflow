@@ -78,6 +78,18 @@ describe('GET /api/exec/tasks', () => {
     expect(c.id).toBeTruthy();
   });
 
+  it('normalises week to the planning week that contains the date', async () => {
+    const a = await capture('a');
+    await patch(a.id, { status: 'later', scheduledDate: '2026-09-25' });
+    // The Sunday-start week holding 25 Sep runs 20–26 Sep; any day in it finds the task.
+    for (const day of ['2026-09-20', '2026-09-22', '2026-09-26']) {
+      const res = await request(app).get(`/api/exec/tasks?week=${day}`);
+      expect(res.body.data.map((t: { title: string }) => t.title)).toEqual(['a']);
+    }
+    const next = await request(app).get('/api/exec/tasks?week=2026-09-27');
+    expect(next.body.data).toEqual([]);
+  });
+
   it('rejects an unknown status and an unknown query key', async () => {
     const status = await request(app).get('/api/exec/tasks?status=someday');
     expect(status.status).toBe(400);

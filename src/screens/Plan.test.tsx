@@ -1,0 +1,101 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { renderRoute } from '../test/render';
+import { stubFetch, json } from '../test/fetch';
+import { SETTINGS, WEEK_ID, makeLookup, makeOutcome, makeWeekView } from '../test/fixtures';
+import type { Outcome, WeekLookup } from '../shared/exec/schemas';
+
+/** A stateful fake: POST /weeks creates the current week, adding and rolling append to it. */
+function fakePlanApi(start: WeekLookup) {
+  let lookup = start;
+  const current = () => lookup.current ?? makeWeekView([]);
+  const append = (outcome: Outcome) => {
+    lookup = { ...lookup, current: makeWeekView([...current().outcomes, outcome]) };
+    return json(outcome, 201);
+  };
+  const calls = stubFetch((url, init) => {
+    const method = init?.method ?? 'GET';
+    if (url.endsWith('/settings')) return json(SETTINGS);
+    if (method === 'GET' && url.startsWith('/api/exec/weeks?')) return json(lookup);
+    if (method === 'POST' && url === '/api/exec/weeks') {
+      lookup = { ...lookup, current: current() };
+      return json(current(), 201);
+    }
+    const slot = current().outcomes.filter((o) => o.slot !== null).length + 1;
+    if (url.endsWith('/outcomes')) return append(makeOutcome({ title: JSON.parse(String(init?.body)).title, slot }));
+    if (url.endsWith('/roll')) return append(makeOutcome({ title: 'Carried', slot, rolledFromId: url.split('/').at(-2) ?? null }));
+    return json([]);
+  });
+  return calls;
+}
+
+const addOutcome = async (title: string, definition: string, button: string) => {
+  await userEvent.type(screen.getByLabelText('Outcome'), title);
+  await userEvent.type(screen.getByLabelText('Definition of done'), definition);
+  await userEvent.click(screen.getByRole('button', { name: button }));
+};
+
+beforeEach(() => {
+  vi.useFakeTimers({ shouldAdvanceTime: true, now: new Date('2026-09-22T04:00:00Z') });
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
+
+describe('/plan', () => {
+  it('chooses three outcomes, requiring a definition of done, and ends on "Week 39 is planned."', async () => {
+    const calls = fakePlanApi(makeLookup());
+    renderRoute('/plan');
+    expect(await screen.findByText('Week 39 · 20–26 Sep')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: "This week's outcomes" })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Last week' })).toBeNull();
+
+    await userEvent.type(screen.getByLabelText('Outcome'), 'Work on supplier meetings');
+    expect(screen.getByRole('note')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add outcome 1' })).toBeDisabled();
+    await userEvent.clear(screen.getByLabelText('Outcome'));
+
+    await addOutcome('Supplier plan confirmed', 'Dates for the top 20', 'Add outcome 1');
+    await screen.findByRole('button', { name: 'Add outcome 2' });
+    expect(within(screen.getByRole('list', { name: 'Chosen outcomes' })).getByText('Supplier plan confirmed')).toBeInTheDocument();
+    await addOutcome('Haleon target signed off', 'Signed by the commercial head', 'Add outcome 2');
+    await screen.findByRole('button', { name: 'Add outcome 3' });
+    await addOutcome('Pinkbox P&L live', 'Live franchise data', 'Add outcome 3');
+
+    expect(await screen.findByRole('heading', { level: 2, name: 'Week 39 is planned.' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open the week' })).toHaveAttribute('href', '/week');
+    expect(screen.getByRole('link', { name: 'Back to Today' })).toHaveAttribute('href', '/');
+    expect(calls.filter((c) => c.method === 'POST').map((c) => c.url)).toEqual([
+      '/api/exec/weeks',
+      `/api/exec/weeks/${WEEK_ID}/outcomes`,
+      `/api/exec/weeks/${WEEK_ID}/outcomes`,
+      `/api/exec/weeks/${WEEK_ID}/outcomes`,
+    ]);
+  });
+
+  it('offers last week\'s open outcomes first, carries one, then moves on', async () => {
+    const open = makeOutcome({ title: 'Delivery tracker sent', weekId: '20000000-0000-4000-8000-000000000002', progress: 60 });
+    const finished = makeOutcome({ title: 'Price list approved', weekId: '20000000-0000-4000-8000-000000000002', slot: 2, status: 'done', progress: 100 });
+    const calls = fakePlanApi(makeLookup({ hasHistory: true, previous: makeWeekView([open, finished], { id: '20000000-0000-4000-8000-000000000002', startDate: '2026-09-13' }) }));
+    renderRoute('/plan');
+    expect(await screen.findByRole('heading', { level: 2, name: 'Last week' })).toBeInTheDocument();
+    expect(screen.getByText(/Delivery tracker sent/)).toBeInTheDocument();
+    expect(screen.queryByText(/Price list approved/)).toBeNull();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Carry "Delivery tracker sent" into this week' }));
+    await waitFor(() => expect(calls.some((c) => c.url === `/api/exec/outcomes/${open.id}/roll`)).toBe(true));
+    expect(calls.find((c) => c.url.endsWith('/roll'))?.body).toEqual({ weekId: WEEK_ID });
+    expect(await screen.findByRole('heading', { level: 2, name: "This week's outcomes" })).toBeInTheDocument();
+  });
+
+  it('lets you stop at fewer than three', async () => {
+    fakePlanApi(makeLookup({ current: makeWeekView([makeOutcome({ title: 'Only one' })]) }));
+    renderRoute('/plan');
+    await userEvent.click(await screen.findByRole('button', { name: 'Done choosing' }));
+    expect(await screen.findByRole('heading', { level: 2, name: 'Week 39 is planned.' })).toBeInTheDocument();
+    expect(screen.getByText('Only one')).toBeInTheDocument();
+  });
+});

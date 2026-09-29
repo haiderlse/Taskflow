@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { ScreenShell } from '../components/ScreenShell';
 import { useProject, useUpdateProject } from '../api/projects';
 import { useCreateMustShip, useMustShips } from '../api/mustShips';
+import { LoadError } from '../components/LoadError';
 import { MustShipForm } from '../components/mustShip/MustShipForm';
 import { errorMessage, useReportError } from '../api/errors';
 import { PROJECT_STATUS_LABELS } from '../lib/labels';
@@ -30,8 +31,16 @@ function Candidates({ project, outcomes }: { project: Project; outcomes: Outcome
   return (
     <section aria-label="Must Ship candidates" className="space-y-2">
       <h2 className="text-xl font-medium">Must Ship candidates</h2>
-      {list.length === 0 && <p className="text-ink-muted">No candidates yet. Planned outputs with no date wait here.</p>}
-      <ul>{list.map((candidate) => <li key={candidate.id}>{candidate.title}</li>)}</ul>
+      {candidates.isError ? (
+        <LoadError what="candidates" error={candidates.error} onRetry={() => void candidates.refetch()} />
+      ) : !candidates.isSuccess ? (
+        <p className="text-ink-muted">Loading candidates…</p>
+      ) : (
+        <>
+          {list.length === 0 && <p className="text-ink-muted">No candidates yet. Planned outputs with no date wait here.</p>}
+          <ul>{list.map((candidate) => <li key={candidate.id}>{candidate.title}</li>)}</ul>
+        </>
+      )}
       <MustShipForm
         key={formKey}
         outcomes={outcomes}
@@ -45,7 +54,7 @@ function Candidates({ project, outcomes }: { project: Project; outcomes: Outcome
   );
 }
 
-/** One project: its outcomes week by week and its open tasks. Must Ship candidates arrive with Must Ships. */
+/** One project: its outcomes week by week, its Must Ship candidates and its open tasks. */
 export default function ProjectDetail() {
   const { id = '' } = useParams();
   const detail = useProject(id);

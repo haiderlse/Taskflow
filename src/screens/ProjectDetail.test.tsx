@@ -66,4 +66,19 @@ describe('/projects/:id', () => {
       expect(calls.find((c) => c.method === 'POST')?.body).toEqual({ title: 'Delivery tracker sent', definitionOfDone: '', outcomeId: null, context: 'work', date: null, projectId: project.id })
     );
   });
+
+  it('says so when the candidates cannot be read instead of showing an empty list', async () => {
+    const project = makeProjectSummary({ name: 'Supply plan' });
+    stubFetch((url) =>
+      url.endsWith('/settings')
+        ? json(SETTINGS)
+        : url.includes('/must-ships')
+          ? failure(500, 'INTERNAL', 'internal server error')
+          : json({ project, outcomes: [], tasks: [] })
+    );
+    renderRoute(`/projects/${project.id}`);
+    const region = await screen.findByRole('region', { name: 'Must Ship candidates' });
+    expect(await within(region).findByRole('alert')).toHaveTextContent('Could not load candidates: internal server error');
+    expect(within(region).queryByText(/No candidates yet/)).toBeNull();
+  });
 });

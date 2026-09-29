@@ -54,7 +54,7 @@ function checkedTasks(db: Database.Database, taskIds: string[]): Task[] {
   });
 }
 
-/** Replaces the day's secondaries (spec B, PUT /days/:date/slots). An inbox task chosen for today is processed onto it. */
+/** Replaces the day's secondaries (spec B, PUT /days/:date/slots). An inbox or later task chosen for today is processed onto it. */
 export function setDaySlots(db: Database.Database, date: string, taskIds: string[], now: string, weekStartDay: number): DayView {
   db.transaction(() => {
     const tasks = checkedTasks(db, taskIds);
@@ -63,7 +63,7 @@ export function setDaySlots(db: Database.Database, date: string, taskIds: string
     const insert = db.prepare('INSERT INTO day_slots (date, slot, task_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)');
     tasks.forEach((task, index) => {
       insert.run(date, index + 1, task.id, now, now);
-      if (task.status === 'inbox') patchTask(db, task.id, { status: 'this_week', scheduledDate: date }, now);
+      if (task.status === 'inbox' || task.status === 'later') patchTask(db, task.id, { status: 'this_week', scheduledDate: date }, now);
     });
   }).immediate();
   return getDayView(db, date, weekStartDay);

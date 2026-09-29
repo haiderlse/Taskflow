@@ -67,6 +67,13 @@ describe('setDaySlots', () => {
     expect(getTask(db, committed.id)?.scheduledDate).toBeNull();
   });
 
+  it('moves a later task onto this week when it becomes a secondary', () => {
+    const parked = capture('Parked idea');
+    patchTask(db, parked.id, { status: 'later' }, T0);
+    setDaySlots(db, DATE, [parked.id], T1, 0);
+    expect(getTask(db, parked.id)).toMatchObject({ status: 'this_week', scheduledDate: DATE });
+  });
+
   it('replaces the slots rather than adding to them', () => {
     const a = capture('A');
     const b = capture('B');

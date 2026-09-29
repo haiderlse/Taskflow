@@ -31,7 +31,7 @@ describe('OutcomeCard', () => {
     fireEvent.change(slider, { target: { value: '60' } });
     expect(onUpdate).not.toHaveBeenCalled();
     fireEvent.blur(slider);
-    expect(onUpdate).toHaveBeenCalledWith({ progress: 60 });
+    expect(onUpdate).toHaveBeenCalledWith({ progress: 60 }, expect.any(Object));
     expect(screen.getByText('60%')).toBeInTheDocument();
   });
 
@@ -81,5 +81,16 @@ describe('OutcomeCard', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save outcome' }));
     expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ title: 'Supplier plan published' }), expect.any(Object));
     expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+  });
+
+  it('puts the slider back to the saved value when the progress save fails', () => {
+    const { onUpdate } = renderCard();
+    onUpdate.mockImplementation((_patch, options) => options?.onError?.());
+    const slider = screen.getByLabelText('Progress for Supplier plan confirmed');
+    fireEvent.change(slider, { target: { value: '60' } });
+    fireEvent.blur(slider);
+    expect(onUpdate).toHaveBeenCalledWith({ progress: 60 }, expect.any(Object));
+    expect(screen.getByText('40%')).toBeInTheDocument();
+    expect(slider).toHaveValue('40');
   });
 });

@@ -29,7 +29,7 @@ export function OutcomeCard({ outcome, onUpdate, onKill }: Props) {
   const [progress, setProgress] = useState(outcome.progress);
   useEffect(() => setProgress(outcome.progress), [outcome.progress]);
   const done = outcome.status === 'done';
-  const commit = () => progress !== outcome.progress && onUpdate({ progress });
+  const commit = () => progress !== outcome.progress && onUpdate({ progress }, { onError: () => setProgress(outcome.progress) });
 
   if (mode === 'edit') {
     return (

@@ -115,6 +115,47 @@ describe('/focus', () => {
     expect(screen.queryByRole('heading', { level: 1, name: 'Today' })).toBeNull();
   });
 
+  it('keeps a live session on screen, with a notice, when a background refresh of today fails', async () => {
+    const block = live();
+    let broken = false;
+    server(makeDayView({ mustShip: ship, blocks: [block] }), (url, init) => {
+      if (url === `/api/exec/days/${DATE}` && broken) return failure(500, 'INTERNAL', 'internal server error');
+      return init?.method === 'POST' ? json(block) : undefined;
+    });
+    renderRoute('/focus');
+    await screen.findByRole('timer', { name: 'Time remaining' });
+    broken = true;
+    await userEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('Could not refresh');
+    expect(timer()).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('shows a neutral Saving after a finish instead of the closed or starting screens', async () => {
+    const block = live();
+    let finished = false;
+    server(makeDayView({ mustShip: ship, blocks: [block] }), (url, init) => {
+      if (init?.method === 'POST') {
+        finished = true;
+        return json({ block, mustShip: null, task: null });
+      }
+      if (url === `/api/exec/days/${DATE}` && finished) {
+        return json(makeDayView({ mustShip: makeMustShip({ title: 'Delivery tracker sent', status: 'shipped' }), blocks: [{ ...block, endedAt: '2026-09-29T04:00:00.000Z', result: 'completed' }] }));
+      }
+      return undefined;
+    });
+    const seen: string[] = [];
+    const observer = new MutationObserver(() => seen.push(document.body.textContent ?? ''));
+    renderRoute('/focus');
+    const completed = await screen.findByRole('button', { name: 'Completed' });
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    await userEvent.click(completed);
+    expect(await screen.findByRole('heading', { level: 1, name: 'Today' })).toBeInTheDocument();
+    observer.disconnect();
+    expect(seen.some((text) => text.includes('Saving…'))).toBe(true);
+    expect(seen.some((text) => text.includes('Nothing left to focus on') || text.includes('Starting your session'))).toBe(false);
+  });
+
   it('says so, with a way back, when there is nothing to focus on or the Must Ship is closed', async () => {
     server(makeDayView());
     const { unmount } = renderRoute('/focus');

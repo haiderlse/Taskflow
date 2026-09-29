@@ -39,10 +39,12 @@ function Editor({ target, outcomes, pending, onSave, onClose }: Props) {
   const [context, setContext] = useState<Context>(start.context);
   const [plannedStart, setPlannedStart] = useState(start.plannedStart);
   const [plannedMinutes, setPlannedMinutes] = useState(String(start.plannedMinutes));
-  const [outcomeId, setOutcomeId] = useState(start.outcomeId ?? '');
+  const offered = (kind: Context) => outcomes.filter((outcome) => outcome.slot !== null && outcome.status === 'active' && contextOf(outcome.category) === kind);
+  // A block's outcome that is no longer offered (killed, unslotted) opens as "No outcome", so the select and the saved payload agree.
+  const [outcomeId, setOutcomeId] = useState(offered(start.context).some((outcome) => outcome.id === start.outcomeId) ? (start.outcomeId ?? '') : '');
   const minutes = Number(plannedMinutes);
   const valid = plannedStart !== '' && Number.isInteger(minutes) && minutes >= 15 && minutes <= 600;
-  const choices = outcomes.filter((outcome) => outcome.slot !== null && outcome.status === 'active' && contextOf(outcome.category) === context);
+  const choices = offered(context);
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (valid && !pending) onSave({ context, plannedStart, plannedMinutes: minutes, outcomeId: outcomeId || null });

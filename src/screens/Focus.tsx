@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ScreenShell } from '../components/ScreenShell';
 import { LoadError } from '../components/LoadError';
@@ -20,8 +21,11 @@ function Nothing({ text }: { text: string }) {
 /** Deep Work (spec C): opened from Today, it starts or resumes today's block. One subject, one timer, three exits. */
 export default function Focus() {
   const state = useFocusSession();
+  const [leaving, setLeaving] = useState(false);
+  if (leaving && state.kind !== 'live') return <ScreenShell title="Focus"><p className={WAIT}>Saving…</p></ScreenShell>;
   return (
     <ScreenShell title="Focus">
+      {leaving && <p className={WAIT}>Saving…</p>}
       {state.kind === 'loading' && <p className={WAIT}>Loading…</p>}
       {state.kind === 'starting' && <p className={WAIT}>Starting your session…</p>}
       {state.kind === 'error' && state.what !== null && <LoadError what={state.what} error={state.error} onRetry={state.retry} />}
@@ -33,7 +37,12 @@ export default function Focus() {
       )}
       {state.kind === 'nothing' && <Nothing text="Nothing to focus on." />}
       {state.kind === 'closed' && <Nothing text={`${state.title} is ${MUST_SHIP_STATUS_LABELS[state.status].toLowerCase()}. Nothing left to focus on.`} />}
-      {state.kind === 'live' && <FocusSession block={state.block} subject={state.subject} />}
+      {state.kind === 'live' && state.refreshFailed && <p role="status" className={WAIT}>Could not refresh today. Showing the last session we have.</p>}
+      {state.kind === 'live' && (
+        <div hidden={leaving}>
+          <FocusSession block={state.block} subject={state.subject} onLeaving={setLeaving} />
+        </div>
+      )}
     </ScreenShell>
   );
 }

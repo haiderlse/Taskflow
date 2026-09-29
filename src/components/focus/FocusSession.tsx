@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useFinishBlock, usePauseBlock, useResumeBlock } from '../../api/deepWork';
+import type { ApiError } from '../../api/client';
 import { useReportError } from '../../api/errors';
 import type { DeepWorkFinishInput } from '../../shared/exec/deepWorkSchemas';
 import type { FocusSubject } from '../../shared/exec/focus';
@@ -8,12 +9,12 @@ import type { DeepWorkBlock } from '../../shared/exec/todaySchemas';
 import { BlockerForm } from './BlockerForm';
 import { FocusTimer } from './FocusTimer';
 
-type Props = { block: DeepWorkBlock; subject: FocusSubject };
+type Props = { block: DeepWorkBlock; subject: FocusSubject; onLeaving: (leaving: boolean) => void };
 
 const EXIT = 'rounded border border-line px-4 py-2 disabled:opacity-40 dark:border-ink-muted';
 
 /** The whole screen of a live session: the subject, the timer, Pause, and three exits. Nothing else (spec C "Deep Work"). */
-export function FocusSession({ block, subject }: Props) {
+export function FocusSession({ block, subject, onLeaving }: Props) {
   const navigate = useNavigate();
   const pause = usePauseBlock();
   const resume = useResumeBlock();
@@ -22,8 +23,18 @@ export function FocusSession({ block, subject }: Props) {
   const [blocking, setBlocking] = useState(false);
   const paused = block.pauseStartedAt !== null;
   const toggling = pause.isPending || resume.isPending;
-  const leave = (input: DeepWorkFinishInput) =>
-    finish.mutate({ id: block.id, input }, { onSuccess: () => navigate('/'), onError: report('finish the session') });
+  // The screen behind this one changes as soon as the day is re-read, so the parent holds "Saving…" until Today is reached.
+  // mutateAsync (not mutate's callbacks) because those do not fire once this component has unmounted.
+  const leave = (input: DeepWorkFinishInput) => {
+    onLeaving(true);
+    finish.mutateAsync({ id: block.id, input }).then(
+      () => navigate('/'),
+      (error: unknown) => {
+        onLeaving(false);
+        report('finish the session')(error as ApiError);
+      }
+    );
+  };
   return (
     <section aria-label="Focus session" className="space-y-6">
       <div className="space-y-2">

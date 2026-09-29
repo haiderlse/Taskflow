@@ -131,6 +131,19 @@ describe('useFocusSession', () => {
     expect(calls.filter((call) => call.method === 'POST' && call.url === '/api/exec/deep-work')).toHaveLength(2);
   });
 
+  it('re-reads today when Try again is pressed, so the retry plans from fresh data', async () => {
+    const calls = server(makeDayView({ mustShip: ship }), 99);
+    const { result } = renderHook(() => useFocusSession(), { wrapper: fresh() });
+    await waitFor(() => expect(result.current.kind).toBe('error'));
+    const reads = () => calls.filter((call) => call.method === 'GET' && call.url === `/api/exec/days/${DATE}`).length;
+    const before = reads();
+    await act(async () => {
+      if (result.current.kind === 'error') result.current.retry();
+    });
+    await waitFor(() => expect(calls.filter((call) => call.method === 'POST')).toHaveLength(2));
+    expect(reads()).toBeGreaterThan(before);
+  });
+
   it('reports a failed read of today or of the schedule, naming it, and never starts anything', async () => {
     const calls = stubFetch((url) => (url.endsWith('/settings') ? json(SETTINGS) : failure(500, 'INTERNAL', 'internal server error')));
     const { result } = renderHook(() => useFocusSession(), { wrapper: fresh() });

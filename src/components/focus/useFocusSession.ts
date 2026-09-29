@@ -11,7 +11,7 @@ export type FocusState =
   | { kind: 'loading' }
   | { kind: 'error'; what: string | null; error: ApiError; retry: () => void }
   | { kind: 'starting' }
-  | { kind: 'live'; block: DeepWorkBlock; subject: FocusSubject }
+  | { kind: 'live'; block: DeepWorkBlock; subject: FocusSubject; refreshFailed: boolean }
   | { kind: 'closed'; title: string; status: MustShipStatus }
   | { kind: 'nothing' };
 
@@ -50,15 +50,20 @@ export function useFocusSession(): FocusState {
     })();
   }, [kind, failure]);
 
+  // Re-plan from fresh data: clear the failure only once today has been read again.
   const retry = () => {
-    attempted.current = false;
-    setFailure(null);
+    void day.refetch().then(() => {
+      attempted.current = false;
+      setFailure(null);
+    });
   };
-  if (schedule.isError) return { kind: 'error', what: 'the schedule', error: schedule.error, retry: () => void schedule.refetch() };
-  if (day.isError) return { kind: 'error', what: 'today', error: day.error, retry: () => void day.refetch() };
+  // A failed background refresh must not hide a session that is already on screen.
+  const refreshFailed = (day.isError && day.data !== undefined) || (schedule.isError && schedule.data !== undefined);
+  if (schedule.isError && schedule.data === undefined) return { kind: 'error', what: 'the schedule', error: schedule.error, retry: () => void schedule.refetch() };
+  if (day.isError && day.data === undefined) return { kind: 'error', what: 'today', error: day.error, retry: () => void day.refetch() };
   if (failure) return { kind: 'error', what: null, error: failure, retry };
   if (!plan) return { kind: 'loading' };
-  if (plan.kind === 'live') return { kind: 'live', block: plan.block, subject: plan.subject };
+  if (plan.kind === 'live') return { kind: 'live', block: plan.block, subject: plan.subject, refreshFailed };
   if (plan.kind === 'closed') return { kind: 'closed', title: plan.title, status: plan.status };
   if (plan.kind === 'nothing') return { kind: 'nothing' };
   return { kind: 'starting' };

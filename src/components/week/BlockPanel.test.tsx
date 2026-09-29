@@ -21,6 +21,14 @@ describe('BlockPanel', () => {
     expect(onSave).toHaveBeenCalledWith({ context: 'work', plannedStart: '08:35', plannedMinutes: 60, outcomeId: office.id });
   });
 
+  it('opens a block whose outcome is no longer offered as "No outcome" and saves no stale id', async () => {
+    const onSave = vi.fn();
+    render(<BlockPanel target={{ kind: 'block', block: makeBlock({ outcomeId: killed.id }) }} outcomes={outcomes} pending={false} onSave={onSave} onClose={vi.fn()} />);
+    expect(screen.getByLabelText('Outcome')).toHaveValue('');
+    await userEvent.click(screen.getByRole('button', { name: 'Save block' }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ outcomeId: null }));
+  });
+
   it('lets a new block choose its context, which changes the outcomes on offer', async () => {
     const onSave = vi.fn();
     render(<BlockPanel target={{ kind: 'new', date: '2026-10-02' }} outcomes={outcomes} pending={false} onSave={onSave} onClose={vi.fn()} />);

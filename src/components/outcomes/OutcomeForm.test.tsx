@@ -63,4 +63,11 @@ describe('OutcomeForm', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Add outcome' }));
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ projectId: active.id }));
   });
+
+  it('leaves focus alone when leaving an activity title goes to another control', async () => {
+    renderForm();
+    await userEvent.type(screen.getByLabelText('Outcome'), 'Work on supplier meetings');
+    fireEvent.blur(screen.getByLabelText('Outcome'), { relatedTarget: screen.getByRole('button', { name: 'Add outcome' }) });
+    expect(screen.getByLabelText('Definition of done')).not.toHaveFocus();
+  });
 });

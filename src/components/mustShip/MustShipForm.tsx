@@ -31,7 +31,7 @@ export function MustShipForm({ outcomes, submitLabel, initial = {}, pending = fa
   return (
     <form aria-label={submitLabel} onSubmit={submit} className="space-y-2">
       <label htmlFor={`${id}-title`} className="block text-sm">Must Ship</label>
-      <input id={`${id}-title`} value={title} onChange={(e) => setTitle(e.target.value)} onBlur={() => isActivityTitle(title) && definitionRef.current?.focus()} placeholder="What will exist by the end of today?" className={FIELD} />
+      <input id={`${id}-title`} value={title} onChange={(e) => setTitle(e.target.value)} onBlur={(e) => e.relatedTarget === null && isActivityTitle(title) && definition.trim() === '' && definitionRef.current?.focus()} placeholder="What will exist by the end of today?" className={FIELD} />
       <NudgeLine show={needsNudge(title, definition)} />
       <label htmlFor={`${id}-definition`} className="block text-sm">Definition of done</label>
       <textarea id={`${id}-definition`} ref={definitionRef} rows={2} value={definition} onChange={(e) => setDefinition(e.target.value)} className={FIELD} />

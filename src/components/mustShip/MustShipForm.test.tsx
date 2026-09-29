@@ -34,4 +34,11 @@ describe('MustShipForm', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Set Must Ship' }));
     expect(onSubmit).toHaveBeenCalledWith({ title: 'Follow up with suppliers', definitionOfDone: '', outcomeId: null });
   });
+
+  it('leaves focus alone when leaving an activity title goes to another control', async () => {
+    renderForm();
+    await userEvent.type(screen.getByLabelText('Must Ship'), 'Follow up with suppliers');
+    fireEvent.blur(screen.getByLabelText('Must Ship'), { relatedTarget: screen.getByRole('button', { name: 'Set Must Ship' }) });
+    expect(screen.getByLabelText('Definition of done')).not.toHaveFocus();
+  });
 });

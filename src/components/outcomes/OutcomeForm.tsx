@@ -47,7 +47,7 @@ export function OutcomeForm({ initial = {}, defaultTargetDate, submitLabel, requ
   return (
     <form aria-label={submitLabel} onSubmit={submit} className="space-y-2 rounded-lg border border-line p-4 dark:border-ink-muted">
       <label htmlFor={`${id}-title`} className="block text-sm">Outcome</label>
-      <input id={`${id}-title`} value={f.title} onChange={(e) => f.setTitle(e.target.value)} onBlur={() => isActivityTitle(f.title) && definitionRef.current?.focus()} placeholder="What will exist when this is finished?" className={FIELD} />
+      <input id={`${id}-title`} value={f.title} onChange={(e) => f.setTitle(e.target.value)} onBlur={(e) => e.relatedTarget === null && isActivityTitle(f.title) && f.definition.trim() === '' && definitionRef.current?.focus()} placeholder="What will exist when this is finished?" className={FIELD} />
       <NudgeLine show={needsNudge(f.title, f.definition)} />
       <label htmlFor={`${id}-category`} className="block text-sm">Category</label>
       <select id={`${id}-category`} value={f.category} onChange={(e) => f.setCategory(e.target.value as OutcomeCategory)} className={FIELD}>

@@ -1,4 +1,4 @@
-import type { MustShipStatus } from '../shared/exec/todaySchemas';
+import type { DeepWorkBlock, MustShipStatus } from '../shared/exec/todaySchemas';
 import type { OutcomeCategory, ProjectStatus, ReviewReason } from '../shared/exec/schemas';
 
 export const CATEGORY_LABELS: Record<OutcomeCategory, string> = {
@@ -38,3 +38,10 @@ export const MUST_SHIP_STATUS_LABELS: Record<MustShipStatus, string> = {
 };
 
 export const WEEKDAY_NAMES: readonly string[] = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+export const BLOCK_RESULT_LABELS: Record<NonNullable<DeepWorkBlock['result']>, string> = {
+  completed: 'Completed',
+  progress: 'Made progress',
+  blocked: 'Blocked',
+  abandoned: 'Abandoned',
+};

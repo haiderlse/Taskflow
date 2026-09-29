@@ -62,14 +62,24 @@ describe('OutcomeCard', () => {
     expect(onKill).toHaveBeenCalledWith('no_longer_important');
   });
 
-  it('edits through the outcome form', async () => {
+  it('stays in edit mode until the save reports success', async () => {
     const { onUpdate } = renderCard();
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save outcome' }));
+    expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ title: 'Supplier plan confirmed', definitionOfDone: 'Dates for the top 20' }), expect.any(Object));
+    expect(screen.getByRole('button', { name: 'Save outcome' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+  });
+
+  it('returns to the view once the save succeeds', async () => {
+    const { onUpdate } = renderCard();
+    onUpdate.mockImplementation((_patch, options) => options?.onSuccess?.());
     await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
     const title = screen.getByLabelText('Outcome');
     await userEvent.clear(title);
     await userEvent.type(title, 'Supplier plan published');
     await userEvent.click(screen.getByRole('button', { name: 'Save outcome' }));
-    expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ title: 'Supplier plan published', definitionOfDone: 'Dates for the top 20' }));
+    expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ title: 'Supplier plan published' }), expect.any(Object));
     expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
   });
 });

@@ -4,7 +4,9 @@ import { CATEGORY_LABELS } from '../../lib/labels';
 import { OutcomeForm } from './OutcomeForm';
 import { ReasonSelect } from './ReasonSelect';
 
-type Props = { outcome: Outcome; onUpdate: (patch: OutcomePatch) => void; onKill: (reason: ReviewReason) => void };
+/** Lets the card react to how a save ended: close the edit form on success, undo local state on failure. */
+export type UpdateOptions = { onSuccess?: () => void; onError?: () => void };
+type Props = { outcome: Outcome; onUpdate: (patch: OutcomePatch, options?: UpdateOptions) => void; onKill: (reason: ReviewReason) => void };
 
 const BUTTON = 'rounded border border-line px-2 py-1 text-xs text-ink-muted hover:text-ink dark:border-ink-muted dark:hover:text-paper';
 
@@ -37,8 +39,10 @@ export function OutcomeCard({ outcome, onUpdate, onKill }: Props) {
         submitLabel="Save outcome"
         onCancel={() => setMode('view')}
         onSubmit={(input) => {
-          onUpdate({ title: input.title, category: input.category, definitionOfDone: input.definitionOfDone, targetDate: input.targetDate, projectId: input.projectId });
-          setMode('view');
+          onUpdate(
+            { title: input.title, category: input.category, definitionOfDone: input.definitionOfDone, targetDate: input.targetDate, projectId: input.projectId },
+            { onSuccess: () => setMode('view') }
+          );
         }}
       />
     );

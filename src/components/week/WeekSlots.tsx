@@ -3,7 +3,7 @@ import { useAddOutcome, useUpdateOutcome } from '../../api/weeks';
 import { useReportError, weekFullOutcomes } from '../../api/errors';
 import { fridayOf } from '../../shared/exec/week';
 import type { Outcome, OutcomeInput, ReviewReason, WeekView } from '../../shared/exec/schemas';
-import { OutcomeCard } from '../outcomes/OutcomeCard';
+import { OutcomeCard, type UpdateOptions } from '../outcomes/OutcomeCard';
 import { OutcomeForm } from '../outcomes/OutcomeForm';
 import { ReplacePicker } from '../outcomes/ReplacePicker';
 
@@ -22,7 +22,18 @@ function Slots({ outcomes }: { outcomes: Outcome[] }) {
           <OutcomeCard
             key={outcome.id}
             outcome={outcome}
-            onUpdate={(patch) => update.mutate({ id: outcome.id, patch }, { onError: report('save the outcome') })}
+            onUpdate={(patch, options?: UpdateOptions) =>
+              update.mutate(
+                { id: outcome.id, patch },
+                {
+                  onSuccess: options?.onSuccess,
+                  onError: (error) => {
+                    report('save the outcome')(error);
+                    options?.onError?.();
+                  },
+                }
+              )
+            }
             onKill={(reason) => update.mutate({ id: outcome.id, patch: { status: 'killed', reviewReason: reason } }, { onError: report('kill the outcome') })}
           />
         );

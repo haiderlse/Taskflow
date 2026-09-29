@@ -25,6 +25,8 @@ test('plans a week: the nudge, three outcomes, a refused fourth, and a replace',
   await choose('Haleon purchase target finalised', 'Signed off by the commercial head', 'Add outcome 2');
   await expect(page.getByRole('button', { name: 'Add outcome 3' })).toBeVisible();
   await choose('Pinkbox P&L dashboard live', 'Shows live franchise data', 'Add outcome 3', 'Business');
+  await expect(page.getByRole('heading', { level: 2, name: 'When will you actually work on these?' })).toBeVisible();
+  await page.getByRole('button', { name: 'Done planning time' }).click();
   await expect(page.getByRole('heading', { level: 2, name: /^Week \d+ is planned\.$/ })).toBeVisible();
 
   const lookup = await (await request.get(`/api/exec/weeks?date=${todayInKarachi()}`)).json();

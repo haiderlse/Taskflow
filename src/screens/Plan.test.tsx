@@ -65,6 +65,9 @@ describe('/plan', () => {
     await screen.findByRole('button', { name: 'Add outcome 3' });
     await addOutcome('Pinkbox P&L live', 'Live franchise data', 'Add outcome 3');
 
+    expect(await screen.findByRole('heading', { level: 2, name: 'When will you actually work on these?' })).toBeInTheDocument();
+    expect(await screen.findByText(/^No time yet: /)).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('button', { name: 'Done planning time' }));
     expect(await screen.findByRole('heading', { level: 2, name: 'Week 39 is planned.' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open the week' })).toHaveAttribute('href', '/week');
     expect(screen.getByRole('link', { name: 'Back to Today' })).toHaveAttribute('href', '/');
@@ -95,6 +98,7 @@ describe('/plan', () => {
     fakePlanApi(makeLookup({ current: makeWeekView([makeOutcome({ title: 'Only one' })]) }));
     renderRoute('/plan');
     await userEvent.click(await screen.findByRole('button', { name: 'Done choosing' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Done planning time' }));
     expect(await screen.findByRole('heading', { level: 2, name: 'Week 39 is planned.' })).toBeInTheDocument();
     expect(screen.getByRole('listitem')).toHaveTextContent('Only one');
   });
@@ -102,6 +106,7 @@ describe('/plan', () => {
   it('offers the next work day\'s Must Ship once the week is planned', async () => {
     const calls = fakePlanApi(makeLookup({ current: makeWeekView([makeOutcome({ slot: 1 }), makeOutcome({ slot: 2 }), makeOutcome({ slot: 3 })]) }));
     renderRoute('/plan');
+    await userEvent.click(await screen.findByRole('button', { name: 'Done planning time' }));
     const next = await screen.findByRole('region', { name: 'Next Must Ship' });
     expect(within(next).getByRole('heading', { name: 'Must Ship for Wednesday 23 September' })).toBeInTheDocument();
     await userEvent.type(await within(next).findByLabelText('Must Ship'), 'Price list approved');
@@ -118,6 +123,7 @@ describe('/plan', () => {
       return json([]);
     });
     renderRoute('/plan');
+    await userEvent.click(await screen.findByRole('button', { name: 'Done planning time' }));
     const next = await screen.findByRole('region', { name: 'Next Must Ship' });
     expect(await within(next).findByRole('alert')).toHaveTextContent('Could not load that day: internal server error');
   });
@@ -126,5 +132,22 @@ describe('/plan', () => {
     stubFetch((url) => (url.endsWith('/settings') ? json(SETTINGS) : failure(500, 'INTERNAL', 'internal server error')));
     renderRoute('/plan');
     expect(await screen.findByRole('alert')).toHaveTextContent('Could not load the week: internal server error');
+  });
+
+  it('lands on the time step when three outcomes are already chosen, and finishes from there', async () => {
+    fakePlanApi(makeLookup({ current: makeWeekView([makeOutcome({ title: 'A', slot: 1 }), makeOutcome({ title: 'B', slot: 2 }), makeOutcome({ title: 'C', slot: 3 })]) }));
+    renderRoute('/plan');
+    expect(await screen.findByRole('heading', { level: 2, name: 'When will you actually work on these?' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /is planned\./ })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Done planning time' }));
+    expect(await screen.findByRole('heading', { level: 2, name: 'Week 39 is planned.' })).toBeInTheDocument();
+  });
+
+  it('shows the grid with the default blocks from today on', async () => {
+    fakePlanApi(makeLookup({ current: makeWeekView([makeOutcome({ title: 'A', slot: 1 }), makeOutcome({ title: 'B', slot: 2 }), makeOutcome({ title: 'C', slot: 3 })]) }));
+    renderRoute('/plan');
+    const tuesday = await screen.findByRole('region', { name: 'Tuesday 22 September' });
+    expect(within(tuesday).getByRole('button', { name: /08:35, 90 minutes, no outcome, suggested/ })).toBeInTheDocument();
+    expect(within(await screen.findByRole('region', { name: 'Monday 21 September' })).getAllByRole('button')).toHaveLength(1);
   });
 });

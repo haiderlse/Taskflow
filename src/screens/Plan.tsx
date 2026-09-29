@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ScreenShell } from '../components/ScreenShell';
 import { LoadError } from '../components/LoadError';
 import { MustShipPicker } from '../components/mustShip/MustShipPicker';
+import { PlanTime } from '../components/plan/PlanTime';
 import { CarryOver } from '../components/plan/CarryOver';
 import { ChooseOutcomes } from '../components/plan/ChooseOutcomes';
 import { useWeekLookup } from '../api/weeks';
@@ -13,7 +14,7 @@ import { dayLabel, nextWorkDay } from '../shared/exec/today';
 import { weekStartOf } from '../shared/exec/time';
 import type { Outcome, Settings } from '../shared/exec/schemas';
 
-type Step = 'carry' | 'choose' | 'done';
+type Step = 'carry' | 'choose' | 'time' | 'done';
 
 /** Step 4 (spec C "Sunday planning"): the next work day's Must Ship can be set here too. */
 function NextMustShip({ today, settings, outcomes }: { today: string; settings: Settings; outcomes: Outcome[] }) {
@@ -44,7 +45,7 @@ function Planned({ startDate, outcomes, today, settings }: { startDate: string; 
   );
 }
 
-/** Sunday planning (spec C, §4): steps 1, 2 and 4. Step 3, assigning deep-work blocks, arrives with the blocks. */
+/** Sunday planning (spec C, §4): carry over, choose, time (deep-work blocks), then the next Must Ship. */
 export default function Plan() {
   const { today, weekStartDay, ready, settings } = useToday();
   const lookup = useWeekLookup(today, { enabled: ready });
@@ -56,7 +57,8 @@ export default function Plan() {
     (outcome) => outcome.status === 'active' && outcome.slot !== null && !slotted.some((mine) => mine.rolledFromId === outcome.id)
   );
   const natural: Step = carryable.length > 0 ? 'carry' : 'choose';
-  const step: Step = slotted.length === 3 || chosenStep === 'done' ? 'done' : chosenStep === 'choose' ? 'choose' : natural;
+  const step: Step =
+    chosenStep === 'done' ? 'done' : chosenStep === 'time' || slotted.length === 3 ? 'time' : chosenStep === 'choose' ? 'choose' : natural;
 
   return (
     <ScreenShell title="Plan the week">
@@ -64,7 +66,8 @@ export default function Plan() {
       {lookup.isError && <LoadError what="the week" error={lookup.error} onRetry={() => void lookup.refetch()} />}
       {!lookup.isSuccess && !lookup.isError && <p className="text-ink-muted">Loading the week…</p>}
       {lookup.isSuccess && step === 'carry' && <CarryOver outcomes={carryable} today={today} weekId={current?.week.id} onNext={() => setChosenStep('choose')} />}
-      {lookup.isSuccess && step === 'choose' && <ChooseOutcomes view={current} today={today} weekStartDate={startDate} onDone={() => setChosenStep('done')} />}
+      {lookup.isSuccess && step === 'choose' && <ChooseOutcomes view={current} today={today} weekStartDate={startDate} onDone={() => setChosenStep('time')} />}
+      {lookup.isSuccess && step === 'time' && <PlanTime view={current} today={today} weekStartDate={startDate} onDone={() => setChosenStep('done')} />}
       {lookup.isSuccess && step === 'done' && <Planned startDate={startDate} outcomes={slotted} today={today} settings={settings} />}
     </ScreenShell>
   );

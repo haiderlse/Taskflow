@@ -80,11 +80,30 @@ describe('useDeepWorkNotice', () => {
     expect(again).not.toHaveBeenCalled();
   });
 
-  it('does nothing where the browser has no notifications', async () => {
+  it('survives a browser that refuses to construct a Notification, and does not retry that day', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true, now: new Date('2026-09-29T03:31:00Z') });
+    const refusing = Object.assign(
+      vi.fn(() => {
+        throw new TypeError('Illegal constructor');
+      }),
+      { permission: 'granted' },
+    );
+    vi.stubGlobal('Notification', refusing);
+    const { result } = renderHook(() => useDeepWorkNotice(), { wrapper: fresh() });
+    await waitFor(() => expect(refusing).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      vi.advanceTimersByTime(120_000);
+    });
+    expect(refusing).toHaveBeenCalledTimes(1);
+    expect(result.current).toBeUndefined();
+  });
+
+  it('renders normally and shows nothing where the browser has no notifications', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true, now: new Date('2026-09-29T03:31:00Z') });
     vi.stubGlobal('Notification', undefined);
     const { result } = renderHook(() => useDeepWorkNotice(), { wrapper: fresh() });
     await settled();
     expect(result.current).toBeUndefined();
+    expect(localStorage.getItem('taskflow.noticeFired')).toBeNull();
   });
 });

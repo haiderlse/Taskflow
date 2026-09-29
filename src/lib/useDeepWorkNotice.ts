@@ -13,6 +13,10 @@ export function useDeepWorkNotice(): void {
     const date = noticeDue(now, settings);
     if (date === null || readStorage(NOTICE_FIRED_KEY) === date) return;
     writeStorage(NOTICE_FIRED_KEY, date);
-    new Notification('Deep work begins in 5 minutes');
+    try {
+      new Notification('Deep work begins in 5 minutes');
+    } catch {
+      // some browsers (Chrome on Android) refuse the constructor; the day is already marked, so it is not retried
+    }
   }, [now, settings]);
 }

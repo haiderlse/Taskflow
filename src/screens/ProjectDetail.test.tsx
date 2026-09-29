@@ -33,4 +33,12 @@ describe('/projects/:id', () => {
     renderRoute('/projects/nope');
     expect(await screen.findByText('That project does not exist.')).toBeInTheDocument();
   });
+
+  it('does not claim the project is gone when the request fails for another reason', async () => {
+    stubFetch((url) => (url.endsWith('/settings') ? json(SETTINGS) : failure(500, 'INTERNAL', 'internal server error')));
+    renderRoute('/projects/some-id');
+    expect(await screen.findByText('Could not load the project: internal server error')).toBeInTheDocument();
+    expect(screen.queryByText('That project does not exist.')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'All projects' })).toHaveAttribute('href', '/projects');
+  });
 });

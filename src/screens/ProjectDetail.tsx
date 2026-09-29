@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ScreenShell } from '../components/ScreenShell';
 import { useProject, useUpdateProject } from '../api/projects';
-import { useReportError } from '../api/errors';
+import { errorMessage, useReportError } from '../api/errors';
 import { PROJECT_STATUS_LABELS } from '../lib/labels';
 import { weekNumber } from '../shared/exec/week';
 import { PROJECT_STATUSES, type ProjectPatch, type ProjectStatus } from '../shared/exec/schemas';
@@ -29,7 +29,9 @@ export default function ProjectDetail() {
   if (detail.isError) {
     return (
       <ScreenShell title="Project">
-        <p className="text-ink-muted">That project does not exist.</p>
+        <p className="text-ink-muted">
+          {detail.error.code === 'NOT_FOUND' ? 'That project does not exist.' : `Could not load the project: ${errorMessage(detail.error)}`}
+        </p>
         <Link to="/projects" className="underline">All projects</Link>
       </ScreenShell>
     );

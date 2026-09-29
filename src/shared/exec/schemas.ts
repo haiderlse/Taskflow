@@ -259,3 +259,6 @@ export const projectDetailSchema = z.object({
   tasks: z.array(taskSchema),
 });
 export type ProjectDetail = z.infer<typeof projectDetailSchema>;
+
+/** The field primitives, for schema modules that live beside this one (todaySchemas.ts). */
+export const fields = { uuid, timestamp, hhmm, weekday, title: outcomeTitle, longText };

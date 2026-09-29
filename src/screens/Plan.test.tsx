@@ -109,6 +109,19 @@ describe('/plan', () => {
     await waitFor(() => expect(calls.find((c) => c.url === '/api/exec/must-ships' && c.method === 'POST')?.body).toMatchObject({ title: 'Price list approved', date: '2026-09-23', context: 'work' }));
   });
 
+  it('says so when the next work day cannot be read', async () => {
+    const planned = makeLookup({ current: makeWeekView([makeOutcome({ slot: 1 }), makeOutcome({ slot: 2 }), makeOutcome({ slot: 3 })]) });
+    stubFetch((url) => {
+      if (url.endsWith('/settings')) return json(SETTINGS);
+      if (url.startsWith('/api/exec/weeks?')) return json(planned);
+      if (url.includes('/days/2026-09-23')) return failure(500, 'INTERNAL', 'internal server error');
+      return json([]);
+    });
+    renderRoute('/plan');
+    const next = await screen.findByRole('region', { name: 'Next Must Ship' });
+    expect(await within(next).findByRole('alert')).toHaveTextContent('Could not load that day: internal server error');
+  });
+
   it('says so when the week cannot be read', async () => {
     stubFetch((url) => (url.endsWith('/settings') ? json(SETTINGS) : failure(500, 'INTERNAL', 'internal server error')));
     renderRoute('/plan');

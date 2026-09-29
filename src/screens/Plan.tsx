@@ -23,7 +23,9 @@ function NextMustShip({ today, settings, outcomes }: { today: string; settings: 
   return (
     <section aria-label="Next Must Ship" className="space-y-2 border-t border-line pt-4 dark:border-ink-muted">
       <h3 className="text-lg font-medium">Must Ship for {dayLabel(next)}</h3>
-      {day.data?.mustShip ? <p>{day.data.mustShip.title}</p> : day.data ? <MustShipPicker date={next} context="work" outcomes={work} /> : null}
+      {day.isError && <LoadError what="that day" error={day.error} onRetry={() => void day.refetch()} />}
+      {!day.isSuccess && !day.isError && <p className="text-ink-muted">Loading…</p>}
+      {day.isSuccess && (day.data.mustShip ? <p>{day.data.mustShip.title}</p> : <MustShipPicker date={next} context="work" outcomes={work} />)}
     </section>
   );
 }

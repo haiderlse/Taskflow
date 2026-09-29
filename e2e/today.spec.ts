@@ -25,6 +25,12 @@ test.beforeEach(async ({ page }) => {
   await page.clock.setFixedTime(TUESDAY_0900);
 });
 
+// The schedule journey edits settings; restoring them here means a failure cannot knock on to week.spec.ts.
+test.afterAll(async ({ request }) => {
+  const restored = await request.put('/api/exec/settings', { data: DEFAULT_SCHEDULE });
+  expect(restored.status()).toBe(200);
+});
+
 test('chooses the Must Ship, refuses a second, and holds two secondaries', async ({ page, request }) => {
   for (const title of SECONDARIES) await request.post('/api/exec/tasks', { data: { title, context: 'work' } });
 
@@ -72,7 +78,7 @@ test('moves through the day: Build before the office, Close the day after shutdo
   await expect(page.getByRole('region', { name: 'Must Ship', exact: true })).toContainText('Delivery tracker sent to the top 20');
 });
 
-test('edits the schedule and Today follows it', async ({ page, request }) => {
+test('edits the schedule and Today follows it', async ({ page }) => {
   await page.goto('/settings');
   await page.getByRole('checkbox', { name: 'Tuesday' }).uncheck();
   await page.getByRole('button', { name: 'Save settings' }).click();
@@ -81,7 +87,4 @@ test('edits the schedule and Today follows it', async ({ page, request }) => {
   await page.goto('/');
   await expect(page.getByRole('region', { name: 'Build' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Must Ship', exact: true })).toHaveCount(0);
-
-  const restored = await request.put('/api/exec/settings', { data: DEFAULT_SCHEDULE });
-  expect(restored.status()).toBe(200);
 });

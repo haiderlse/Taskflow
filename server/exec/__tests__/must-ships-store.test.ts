@@ -52,6 +52,14 @@ describe('createMustShip', () => {
     expect(createMustShip(db, input('Build it', { context: 'build' }), T0).context).toBe('build');
   });
 
+  it('lets a killed Must Ship keep holding its day', () => {
+    const killed = createMustShip(db, input('Dropped'), T0);
+    patchMustShip(db, killed.id, { status: 'killed' }, T1);
+    const error = refusal(() => createMustShip(db, input('Replacement'), T1));
+    expect(error).toMatchObject({ status: 409, code: 'DAY_TAKEN' });
+    expect(error.details).toMatchObject({ mustShip: { title: 'Dropped', status: 'killed' } });
+  });
+
   it('keeps any number of undated candidates', () => {
     createMustShip(db, input('A', { date: null }), T0);
     createMustShip(db, input('B', { date: null }), T0);

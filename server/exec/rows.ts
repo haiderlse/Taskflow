@@ -8,7 +8,7 @@ export const PLAIN: FieldSpec = { json: [], dates: [], bools: [] };
 export type Bindable = string | number | null;
 
 /** Every table a store may write. A literal union, so the name is never request-derived. */
-export type ExecTable = 'tasks' | 'projects' | 'weeks' | 'outcomes' | 'must_ships';
+export type ExecTable = 'tasks' | 'projects' | 'weeks' | 'outcomes' | 'must_ships' | 'deep_work_blocks';
 
 export const toEntity = <T>(row: unknown): T => rowToEntity<T>(row as Record<string, unknown>, PLAIN);
 

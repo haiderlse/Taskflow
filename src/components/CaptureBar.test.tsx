@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { CaptureBar } from './CaptureBar';
+import { CaptureBar, CAPTURED_MESSAGE } from './CaptureBar';
 import { renderWithProviders } from '../test/render';
 import { stubFetch, json, failure } from '../test/fetch';
 import { SETTINGS, makeTask } from '../test/fixtures';
@@ -29,7 +29,7 @@ describe('CaptureBar', () => {
     await waitFor(() => expect(calls.find((c) => c.method === 'POST')).toBeDefined());
     expect(calls.find((c) => c.method === 'POST')).toMatchObject({ url: '/api/exec/tasks', body: { title: 'Call the supplier', context: 'build' } });
     await waitFor(() => expect(input).toHaveValue(''));
-    expect(await screen.findByRole('status')).toHaveTextContent('Captured. It is in the Inbox, not on Today.');
+    expect(await screen.findByRole('status')).toHaveTextContent(CAPTURED_MESSAGE);
   });
 
   it('lets the toggle override the clock', async () => {

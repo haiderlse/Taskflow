@@ -234,4 +234,14 @@ describe('/inbox', () => {
     await userEvent.click(screen.getByRole('button', { name: 'This week (T)' }));
     await waitFor(() => expect(patches(api.calls)[0]?.body).toEqual({ status: 'this_week' }));
   });
+  it('starts the selection at the first row when the tab changes', async () => {
+    fakeApi([makeTask({ title: 'A' }), makeTask({ title: 'B' }), makeTask({ title: 'P1', status: 'later' }), makeTask({ title: 'P2', status: 'later' })]);
+    renderRoute('/inbox');
+    await screen.findByText('2 to process');
+    await userEvent.keyboard('j');
+    expect(rows()[1]).toHaveAttribute('aria-selected', 'true');
+    await userEvent.click(screen.getByRole('tab', { name: 'Later' }));
+    await screen.findByText('2 parked');
+    expect(rows()[0]).toHaveAttribute('aria-selected', 'true');
+  });
 });

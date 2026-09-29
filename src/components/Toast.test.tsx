@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import { ToastProvider, useToast } from './Toast';
+import { CAPTURED_MESSAGE } from './CaptureBar';
 
 function Trigger() {
   const toast = useToast();
-  return <button onClick={() => toast.show('Captured. It is in the Inbox, not on Today.')}>go</button>;
+  return <button onClick={() => toast.show(CAPTURED_MESSAGE)}>go</button>;
 }
 
 afterEach(() => vi.useRealTimers());
@@ -19,7 +20,7 @@ describe('ToastProvider', () => {
     );
     expect(screen.queryByRole('status')).toBeNull();
     act(() => screen.getByText('go').click());
-    expect(screen.getByRole('status')).toHaveTextContent('Captured. It is in the Inbox, not on Today.');
+    expect(screen.getByRole('status')).toHaveTextContent(CAPTURED_MESSAGE);
     act(() => vi.advanceTimersByTime(4000));
     expect(screen.queryByRole('status')).toBeNull();
   });

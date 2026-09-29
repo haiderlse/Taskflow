@@ -1,0 +1,28 @@
+import type { OutcomeCategory, ProjectStatus, ReviewReason } from '../shared/exec/schemas';
+
+export const CATEGORY_LABELS: Record<OutcomeCategory, string> = {
+  office: 'Office',
+  business: 'Business',
+  career: 'Career',
+  personal: 'Personal',
+};
+
+export const REASON_LABELS: Record<ReviewReason, string> = {
+  insufficient_time: 'Not enough time',
+  unexpected_urgent_work: 'Urgent work came up',
+  dependency_blocker: 'Blocked by a dependency',
+  poor_estimation: 'Underestimated',
+  too_many_meetings: 'Too many meetings',
+  priority_changed: 'Priority changed',
+  procrastination: 'Put it off',
+  unclear_outcome: 'Outcome was unclear',
+  delegated_dependency: 'Waiting on someone',
+  no_longer_important: 'No longer important',
+  other: 'Other',
+};
+
+export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
+  active: 'Active',
+  done: 'Done',
+  archived: 'Archived',
+};

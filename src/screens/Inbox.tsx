@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { useDeleteTask, useTasks, useUpdateTask } from '../api/tasks';
 import { useSettings } from '../api/settings';
 import { useToast } from '../components/Toast';
+import { useReportError } from '../api/errors';
 import { InboxList } from '../components/inbox/InboxList';
 import { DelegatePanel } from '../components/inbox/DelegatePanel';
 import { SchedulePanel } from '../components/inbox/SchedulePanel';
@@ -10,7 +11,6 @@ import { useInboxKeys, type InboxAction } from '../components/inbox/useInboxKeys
 import { scheduleStatus, tomorrowFrom } from '../lib/inboxRules';
 import { toCalendarDate } from '../shared/exec/dates';
 import { localClock } from '../shared/exec/time';
-import type { ApiError } from '../api/client';
 import type { Task } from '../shared/exec/schemas';
 
 type Tab = 'inbox' | 'later';
@@ -37,7 +37,7 @@ export default function Inbox() {
   const weekStartDay = settings.data?.weekStartDay ?? 0;
   const parked = tab === 'later';
 
-  const report = (verb: string) => (error: ApiError) => toast.show(`Could not ${verb}: ${error.message}`);
+  const report = useReportError();
 
   const act = useCallback(
     (action: InboxAction, index: number) => {
@@ -65,7 +65,7 @@ export default function Inbox() {
       <h1 className="text-3xl font-semibold tracking-tight">Inbox</h1>
       <div role="tablist" className="flex gap-2">
         {TABS.map((t) => (
-          <button key={t.id} role="tab" aria-selected={tab === t.id} onClick={() => { setTab(t.id); setPanel(null); }} className={`rounded-md px-3 py-1.5 text-sm ${tab === t.id ? 'bg-ink text-paper dark:bg-paper dark:text-ink' : 'text-ink-muted'}`}>
+          <button key={t.id} role="tab" aria-selected={tab === t.id} onClick={() => { setTab(t.id); setPanel(null); setSelected(0); }} className={`rounded-md px-3 py-1.5 text-sm ${tab === t.id ? 'bg-ink text-paper dark:bg-paper dark:text-ink' : 'text-ink-muted'}`}>
             {t.label}
           </button>
         ))}

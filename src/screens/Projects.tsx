@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { ScreenShell } from '../components/ScreenShell';
 import { ContextToggle } from '../components/ContextToggle';
+import { LoadError } from '../components/LoadError';
 import { useCreateProject, useProjects } from '../api/projects';
 import { useReportError } from '../api/errors';
 import { PROJECT_STATUS_LABELS } from '../lib/labels';
@@ -52,10 +53,12 @@ function Group({ label, projects }: { label: 'Work' | 'Build'; projects: Project
 
 /** Spec C "Projects": a list, never a board, with work and build kept apart (§16). */
 export default function Projects() {
-  const projects = useProjects().data;
+  const query = useProjects();
+  const projects = query.data;
   return (
     <ScreenShell title="Projects">
       <NewProject />
+      {query.isError && <LoadError what="projects" error={query.error} onRetry={() => void query.refetch()} />}
       {projects && (
         <>
           <Group label="Work" projects={projects.filter((project) => project.context === 'work')} />

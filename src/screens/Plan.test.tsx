@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderRoute } from '../test/render';
-import { stubFetch, json } from '../test/fetch';
+import { stubFetch, json, failure } from '../test/fetch';
 import { SETTINGS, WEEK_ID, makeLookup, makeOutcome, makeWeekView } from '../test/fixtures';
 import type { Outcome, WeekLookup } from '../shared/exec/schemas';
 
@@ -96,6 +96,22 @@ describe('/plan', () => {
     renderRoute('/plan');
     await userEvent.click(await screen.findByRole('button', { name: 'Done choosing' }));
     expect(await screen.findByRole('heading', { level: 2, name: 'Week 39 is planned.' })).toBeInTheDocument();
-    expect(screen.getByText('Only one')).toBeInTheDocument();
+    expect(screen.getByRole('listitem')).toHaveTextContent('Only one');
+  });
+
+  it('offers the next work day\'s Must Ship once the week is planned', async () => {
+    const calls = fakePlanApi(makeLookup({ current: makeWeekView([makeOutcome({ slot: 1 }), makeOutcome({ slot: 2 }), makeOutcome({ slot: 3 })]) }));
+    renderRoute('/plan');
+    const next = await screen.findByRole('region', { name: 'Next Must Ship' });
+    expect(within(next).getByRole('heading', { name: 'Must Ship for Wednesday 23 September' })).toBeInTheDocument();
+    await userEvent.type(await within(next).findByLabelText('Must Ship'), 'Price list approved');
+    await userEvent.click(within(next).getByRole('button', { name: 'Set Must Ship' }));
+    await waitFor(() => expect(calls.find((c) => c.url === '/api/exec/must-ships' && c.method === 'POST')?.body).toMatchObject({ title: 'Price list approved', date: '2026-09-23', context: 'work' }));
+  });
+
+  it('says so when the week cannot be read', async () => {
+    stubFetch((url) => (url.endsWith('/settings') ? json(SETTINGS) : failure(500, 'INTERNAL', 'internal server error')));
+    renderRoute('/plan');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not load the week: internal server error');
   });
 });

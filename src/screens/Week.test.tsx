@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, waitFor, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderRoute } from '../test/render';
-import { stubFetch, json } from '../test/fetch';
+import { stubFetch, json, failure } from '../test/fetch';
 import { SETTINGS, WEEK_ID, makeLookup, makeOutcome, makeTask, makeWeekView } from '../test/fixtures';
 import type { WeekLookup } from '../shared/exec/schemas';
 
@@ -142,5 +142,11 @@ describe('/week', () => {
     fireEvent.change(slider, { target: { value: '60' } });
     fireEvent.blur(slider);
     await waitFor(() => expect(calls.find((c) => c.method === 'PATCH')).toMatchObject({ url: `/api/exec/outcomes/${outcomes[0].id}`, body: { progress: 60 } }));
+  });
+
+  it('says so when the week cannot be read', async () => {
+    stubFetch((url) => (url.endsWith('/settings') ? json(SETTINGS) : failure(500, 'INTERNAL', 'internal server error')));
+    renderRoute('/week');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not load the week: internal server error');
   });
 });

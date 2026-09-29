@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { ScreenShell } from '../components/ScreenShell';
+import { LoadError } from '../components/LoadError';
 import { WeekSlots } from '../components/week/WeekSlots';
 import { WeekTasks } from '../components/week/WeekTasks';
 import { useWeekLookup } from '../api/weeks';
@@ -20,6 +21,7 @@ export default function Week() {
         <p className="text-ink-muted">Week {weekNumber(startDate)} · {weekRangeLabel(startDate)}</p>
         {planned ? <span className="text-sm text-ink-muted">Planned</span> : <Link to="/plan" className="text-sm underline">Plan this week</Link>}
       </div>
+      {lookup.isError && <LoadError what="the week" error={lookup.error} onRetry={() => void lookup.refetch()} />}
       <WeekSlots view={view} today={today} weekStartDate={startDate} />
       <WeekTasks weekStartDate={startDate} outcomes={view?.outcomes ?? []} />
     </ScreenShell>

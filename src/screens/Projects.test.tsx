@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderRoute } from '../test/render';
-import { stubFetch, json } from '../test/fetch';
+import { stubFetch, json, failure } from '../test/fetch';
 import { SETTINGS, makeProjectSummary } from '../test/fixtures';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -36,5 +36,11 @@ describe('/projects', () => {
     stubFetch((url) => (url.endsWith('/settings') ? json(SETTINGS) : json([makeProjectSummary({ name: 'Supply plan', mustShipCandidates: 2 })])));
     renderRoute('/projects');
     expect(await screen.findByRole('region', { name: 'Work' })).toHaveTextContent('0 outcomes · 0 open tasks · 2 candidates');
+  });
+
+  it('says so when the projects cannot be read', async () => {
+    stubFetch((url) => (url.endsWith('/settings') ? json(SETTINGS) : failure(500, 'INTERNAL', 'internal server error')));
+    renderRoute('/projects');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not load projects: internal server error');
   });
 });

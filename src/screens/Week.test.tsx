@@ -3,7 +3,7 @@ import { screen, waitFor, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderRoute } from '../test/render';
 import { stubFetch, json, failure } from '../test/fetch';
-import { SETTINGS, WEEK_ID, makeLookup, makeOutcome, makeTask, makeWeekView } from '../test/fixtures';
+import { SETTINGS, WEEK_ID, makeBlock, makeLookup, makeOutcome, makeTask, makeWeekView } from '../test/fixtures';
 import type { WeekLookup } from '../shared/exec/schemas';
 
 const weekFull = (outcomes: unknown) =>
@@ -147,6 +147,34 @@ describe('/week', () => {
   it('says so when the week cannot be read', async () => {
     stubFetch((url) => (url.endsWith('/settings') ? json(SETTINGS) : failure(500, 'INTERNAL', 'internal server error')));
     renderRoute('/week');
-    expect(await screen.findByRole('alert')).toHaveTextContent('Could not load the week: internal server error');
+    expect(await screen.findByText('Could not load the week: internal server error')).toBeInTheDocument();
+  });
+
+  it('shows minutes planned and done on each card, and "No time allocated" without a block', async () => {
+    const outcomes = three();
+    const blocks = [makeBlock({ outcomeId: outcomes[0].id, plannedMinutes: 90, startedAt: '2026-09-22T03:35:00.000Z', endedAt: '2026-09-22T04:15:00.000Z', result: 'progress' })];
+    stubFetch((url) =>
+      url.endsWith('/settings') ? json(SETTINGS) : url.startsWith('/api/exec/weeks?') ? json(makeLookup({ current: makeWeekView(outcomes) })) : url.startsWith('/api/exec/deep-work?') ? json(blocks) : json([])
+    );
+    renderRoute('/week');
+    const first = await screen.findByRole('article', { name: 'A' });
+    expect(await within(first).findByText('Deep work 90 min planned · 40 min done')).toBeInTheDocument();
+    expect(within(screen.getByRole('article', { name: 'B' })).getByText('No time allocated')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Deep work' })).toBeInTheDocument();
+  });
+
+  it('says nothing about time on the cards when the blocks cannot be read, and reports it in the grid', async () => {
+    stubFetch((url) =>
+      url.endsWith('/settings')
+        ? json(SETTINGS)
+        : url.startsWith('/api/exec/weeks?')
+          ? json(makeLookup({ current: makeWeekView(three()) }))
+          : url.startsWith('/api/exec/deep-work?')
+            ? failure(500, 'INTERNAL', 'internal server error')
+            : json([])
+    );
+    renderRoute('/week');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not load deep work: internal server error');
+    expect(screen.queryByText('No time allocated')).toBeNull();
   });
 });

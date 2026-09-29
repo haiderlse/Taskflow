@@ -105,3 +105,17 @@ describe('OutcomeCard Must Ship count', () => {
     expect(screen.queryByText(/Must Ships shipped/)).toBeNull();
   });
 });
+
+describe('OutcomeCard deep work', () => {
+  it('shows planned and done minutes, says when no time is allocated, and shows nothing while unknown', () => {
+    const outcome = makeOutcome({ title: 'Supplier plan confirmed' });
+    const { unmount } = renderWithProviders(<OutcomeCard outcome={outcome} onUpdate={vi.fn()} onKill={vi.fn()} deepWork={{ planned: 180, done: 95 }} />);
+    expect(screen.getByText('Deep work 180 min planned · 95 min done')).toBeInTheDocument();
+    unmount();
+    const empty = renderWithProviders(<OutcomeCard outcome={outcome} onUpdate={vi.fn()} onKill={vi.fn()} deepWork={{ planned: 0, done: 0 }} />);
+    expect(screen.getByText('No time allocated')).toBeInTheDocument();
+    empty.unmount();
+    renderWithProviders(<OutcomeCard outcome={outcome} onUpdate={vi.fn()} onKill={vi.fn()} />);
+    expect(screen.queryByText(/No time allocated|min planned/)).toBeNull();
+  });
+});

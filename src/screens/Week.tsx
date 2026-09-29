@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { ScreenShell } from '../components/ScreenShell';
 import { LoadError } from '../components/LoadError';
 import { WeekSlots } from '../components/week/WeekSlots';
+import { WeekDeepWork } from '../components/week/WeekDeepWork';
 import { WeekTasks } from '../components/week/WeekTasks';
 import { useWeekLookup } from '../api/weeks';
 import { useToday } from '../lib/useToday';
@@ -23,6 +24,7 @@ export default function Week() {
       </div>
       {lookup.isError && <LoadError what="the week" error={lookup.error} onRetry={() => void lookup.refetch()} />}
       <WeekSlots view={view} today={today} weekStartDate={startDate} />
+      <WeekDeepWork weekStartDate={startDate} today={today} outcomes={view?.outcomes ?? []} />
       <WeekTasks weekStartDate={startDate} outcomes={view?.outcomes ?? []} />
     </ScreenShell>
   );

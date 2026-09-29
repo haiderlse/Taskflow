@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useAddOutcome, useUpdateOutcome } from '../../api/weeks';
 import { useMustShips } from '../../api/mustShips';
+import { useBlocks } from '../../api/deepWork';
+import { minutesByOutcome, weekRange } from '../../shared/exec/deepWork';
 import { useReportError, weekFullOutcomes } from '../../api/errors';
 import { fridayOf } from '../../shared/exec/week';
 import type { Outcome, OutcomeInput, ReviewReason, WeekView } from '../../shared/exec/schemas';
@@ -18,7 +20,9 @@ function countFor(mustShips: MustShip[], outcomeId: string): { shipped: number; 
   return { shipped: linked.filter((mustShip) => mustShip.status === 'shipped').length, total: linked.length };
 }
 
-function Slots({ outcomes, mustShips }: { outcomes: Outcome[]; mustShips: MustShip[] }) {
+type Minutes = Record<string, { planned: number; done: number }>;
+
+function Slots({ outcomes, mustShips, minutes }: { outcomes: Outcome[]; mustShips: MustShip[]; minutes: Minutes | null }) {
   const update = useUpdateOutcome();
   const report = useReportError();
   return (
@@ -31,6 +35,7 @@ function Slots({ outcomes, mustShips }: { outcomes: Outcome[]; mustShips: MustSh
             key={outcome.id}
             outcome={outcome}
             mustShipCount={countFor(mustShips, outcome.id)}
+            deepWork={minutes ? minutes[outcome.id] ?? { planned: 0, done: 0 } : undefined}
             onUpdate={(patch, options?: UpdateOptions) =>
               update.mutate(
                 { id: outcome.id, patch },
@@ -55,6 +60,8 @@ function Slots({ outcomes, mustShips }: { outcomes: Outcome[]; mustShips: MustSh
 export function WeekSlots({ view, today, weekStartDate }: Props) {
   const add = useAddOutcome();
   const mustShips = useMustShips({ week: weekStartDate }, { enabled: view !== null }).data ?? [];
+  const blocks = useBlocks(weekRange(weekStartDate), { enabled: view !== null });
+  const minutes = blocks.data ? minutesByOutcome(blocks.data) : null;
   const report = useReportError();
   const [adding, setAdding] = useState(false);
   const [pending, setPending] = useState<PendingReplace | null>(null);
@@ -77,7 +84,7 @@ export function WeekSlots({ view, today, weekStartDate }: Props) {
 
   return (
     <section aria-label="Outcomes" className="space-y-3">
-      <Slots outcomes={slotted} mustShips={mustShips} />
+      <Slots outcomes={slotted} mustShips={mustShips} minutes={minutes} />
       {pending ? (
         <ReplacePicker outcomes={pending.outcomes} pending={add.isPending} onCancel={() => setPending(null)} onPick={(outcomeId, reason) => send(pending.input, { outcomeId, reason })} />
       ) : adding ? (

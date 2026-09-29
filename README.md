@@ -55,6 +55,21 @@ Candidates — planned outputs with no date yet — live on each project's page.
 The schedule (work days, deep-work window, shutdown, office hours, build
 blocks) is edited at `/settings`.
 
+## Deep work
+
+Opening `/focus` (the "Start deep work" link on Today, or the `f` key) starts
+today's block for the moment (work in office hours, build outside them) or
+resumes the one already running. The countdown is worked out from the block's
+timestamps, so a reload or a second tab loses nothing; past zero it counts up
+quietly. Pause when you must, and leave with one of three exits: Completed
+ships the Must Ship, Made progress leaves it planned for the shutdown, and
+Blocked asks what blocks it, who owns the unblock and the next action, then
+files that action as a waiting task to follow up the next day. The grid on
+`/week` (and step 3 of `/plan`) lays your default blocks over the week: click
+one to give it an outcome, or add another. Outcomes with no block are flagged
+as having no time. Allow notifications from Today to get a notice five minutes
+before deep work begins.
+
 ## Checks
 
     npm run lint            # TypeScript, strict config (src/, server/, e2e/, root configs)

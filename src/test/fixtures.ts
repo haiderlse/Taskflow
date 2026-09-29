@@ -1,4 +1,4 @@
-import type { DayView, MustShip } from '../shared/exec/todaySchemas';
+import type { DeepWorkBlock, DayView, MustShip } from '../shared/exec/todaySchemas';
 import type { Outcome, ProjectSummary, Settings, Task, Week, WeekLookup, WeekView } from '../shared/exec/schemas';
 
 export const SETTINGS: Settings = {
@@ -144,3 +144,26 @@ export const makeDayView = (overrides: Partial<DayView> = {}): DayView => ({
   inboxCount: 0,
   ...overrides,
 });
+
+/** An unstarted work block for Tuesday 29 Sep 2026, 08:35 for 90 minutes, unless overridden. */
+export function makeBlock(overrides: Partial<DeepWorkBlock> = {}): DeepWorkBlock {
+  counter += 1;
+  return {
+    id: `50000000-0000-4000-8000-${String(counter).padStart(12, '0')}`,
+    date: '2026-09-29',
+    context: 'work',
+    plannedStart: '08:35',
+    plannedMinutes: 90,
+    outcomeId: null,
+    mustShipId: null,
+    startedAt: null,
+    endedAt: null,
+    pausedSeconds: 0,
+    pauseStartedAt: null,
+    result: null,
+    notes: '',
+    createdAt: STAMP,
+    updatedAt: STAMP,
+    ...overrides,
+  };
+}

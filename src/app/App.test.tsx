@@ -1,10 +1,19 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, within } from '@testing-library/react';
 import { renderRoute, healthOk } from '../test/render';
-import { SETTINGS } from '../test/fixtures';
+import { SETTINGS, makeDayView } from '../test/fixtures';
 import { json } from '../test/fetch';
 
-beforeEach(() => vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => (String(input).endsWith('/settings') ? json(SETTINGS) : healthOk()))));
+const answer = (url: string) =>
+  url.endsWith('/settings')
+    ? json(SETTINGS)
+    : url.includes('/days/')
+      ? json(makeDayView())
+      : /\/(must-ships|tasks|projects)/.test(url)
+        ? json([])
+        : healthOk();
+
+beforeEach(() => vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => answer(String(input)))));
 afterEach(() => vi.unstubAllGlobals());
 
 describe('the app shell', () => {

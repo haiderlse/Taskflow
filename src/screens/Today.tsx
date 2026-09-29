@@ -1,47 +1,35 @@
-import { Link } from 'react-router-dom';
 import { ScreenShell } from '../components/ScreenShell';
 import { CaptureBar } from '../components/CaptureBar';
-import { useWeekLookup } from '../api/weeks';
+import { LoadError } from '../components/LoadError';
+import { TodayHeader } from '../components/today/TodayHeader';
+import { Banners } from '../components/today/Banners';
+import { PrimaryCard } from '../components/today/PrimaryCard';
+import { useDay } from '../api/days';
+import { useSettings } from '../api/settings';
 import { useToday } from '../lib/useToday';
-import type { Outcome } from '../shared/exec/schemas';
+import { nextWorkDay, todayMode } from '../shared/exec/today';
 
-function PlanBanner({ firstWeek }: { firstWeek: boolean }) {
-  return (
-    <>
-      <Link to="/plan" className="block rounded-lg border border-line bg-paper-raised px-4 py-3 text-lg font-medium hover:border-ink dark:border-ink-muted dark:bg-ink">
-        {firstWeek ? 'Plan your first week' : 'Plan this week'}
-      </Link>
-      <p className="text-ink-muted">Nothing is planned yet. The week's outcomes come first.</p>
-    </>
-  );
-}
-
-function ThisWeek({ outcomes }: { outcomes: Outcome[] }) {
-  return (
-    <section className="space-y-2">
-      <h2 className="text-sm uppercase tracking-wide text-ink-muted">This week</h2>
-      <ol aria-label="This week" className="space-y-1">
-        {outcomes.map((outcome) => (
-          <li key={outcome.id} className="flex justify-between gap-3">
-            <span>{outcome.title}</span>
-            <span className="text-ink-muted">{outcome.progress}%</span>
-          </li>
-        ))}
-      </ol>
-      <Link to="/week" className="text-sm underline">Open the week</Link>
-    </section>
-  );
-}
-
-/** Phase 3: the week's outcomes or the invitation to plan them, with capture pinned below. Phase 4 adds the Must Ship. */
+/** What must I ship today, and what am I working on right now? (spec C "Today") */
 export default function Today() {
-  const { today, ready } = useToday();
-  const lookup = useWeekLookup(today, { enabled: ready });
-  const outcomes = (lookup.data?.current?.outcomes ?? []).filter((outcome) => outcome.slot !== null);
+  const { today, now, ready } = useToday();
+  const settings = useSettings();
+  const day = useDay(today, { enabled: ready });
+  const next = settings.data ? nextWorkDay(today, settings.data.workDays) : today;
+  const tomorrow = useDay(next, { enabled: ready && Boolean(day.data?.day?.shutdownAt) });
+  const loaded = settings.data && day.data ? { settings: settings.data, view: day.data } : null;
+  const mode = loaded ? todayMode(now, loaded.settings, loaded.view) : null;
   return (
     <ScreenShell title="Today">
-      {lookup.isSuccess && outcomes.length === 0 && <PlanBanner firstWeek={lookup.data?.hasHistory !== true} />}
-      {outcomes.length > 0 && <ThisWeek outcomes={outcomes} />}
+      {settings.isError && <LoadError what="the schedule" error={settings.error} onRetry={() => void settings.refetch()} />}
+      {day.isError && <LoadError what="today" error={day.error} onRetry={() => void day.refetch()} />}
+      {!loaded && !settings.isError && !day.isError && <p className="text-ink-muted">Loading today…</p>}
+      {loaded && mode && (
+        <>
+          <TodayHeader date={today} weekStartDay={loaded.settings.weekStartDay} week={loaded.view.week} />
+          <Banners banners={mode.banners} firstWeek={!loaded.view.hasHistory} />
+          <PrimaryCard mode={mode} view={loaded.view} settings={loaded.settings} tomorrow={{ date: next, mustShip: tomorrow.data?.mustShip ?? null }} />
+        </>
+      )}
       <div className="sticky bottom-20 pt-6 md:bottom-6">
         <CaptureBar />
       </div>

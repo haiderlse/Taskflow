@@ -1,37 +1,90 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { renderRoute } from '../test/render';
-import { stubFetch, json } from '../test/fetch';
-import { SETTINGS, makeLookup, makeOutcome, makeWeekView } from '../test/fixtures';
-import type { WeekLookup } from '../shared/exec/schemas';
+import { stubFetch, json, failure } from '../test/fetch';
+import { SETTINGS, makeDayView, makeMustShip, makeOutcome, makeWeekView } from '../test/fixtures';
+import type { DayView } from '../shared/exec/todaySchemas';
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
-const api = (lookup: WeekLookup) =>
-  stubFetch((url) => (url.endsWith('/settings') ? json(SETTINGS) : url.startsWith('/api/exec/weeks') ? json(lookup) : json([])));
+/** Karachi is UTC+5: 2026-09-29T04:00:00Z is Tuesday 09:00 there. */
+const at = (iso: string) => vi.useFakeTimers({ shouldAdvanceTime: true, now: new Date(iso) });
 
-describe('Today and the week', () => {
-  it('invites the first plan when no week has ever held an outcome', async () => {
-    api(makeLookup());
+function api(days: Record<string, DayView | (() => Response)>) {
+  return stubFetch((url) => {
+    if (url.endsWith('/settings')) return json(SETTINGS);
+    const date = url.match(/\/days\/(\d{4}-\d{2}-\d{2})$/)?.[1];
+    if (date) {
+      const answer = days[date] ?? makeDayView({ date });
+      return typeof answer === 'function' ? answer() : json(answer);
+    }
+    return json([]);
+  });
+}
+
+const outcome = makeOutcome({ title: 'Supplier plan confirmed' });
+const planned = makeWeekView([outcome], { startDate: '2026-09-27' });
+
+describe('Today, by the moment', () => {
+  it('asks for today\'s Must Ship at 09:00 on a Tuesday, under the first-plan banner', async () => {
+    at('2026-09-29T04:00:00Z');
+    api({});
     renderRoute('/');
-    expect(await screen.findByRole('link', { name: 'Plan your first week' })).toHaveAttribute('href', '/plan');
+    expect(await screen.findByRole('region', { name: "Choose today's Must Ship" })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Plan your first week' })).toHaveAttribute('href', '/plan');
+    expect(screen.getByText('Tuesday 29 September · Week 40')).toBeInTheDocument();
   });
 
-  it('asks for this week\'s plan once there is history', async () => {
-    api(makeLookup({ hasHistory: true, current: makeWeekView([]) }));
+  it('shows the Must Ship with Start deep work once it is set', async () => {
+    at('2026-09-29T04:00:00Z');
+    api({ '2026-09-29': makeDayView({ week: planned, hasHistory: true, mustShip: makeMustShip({ title: 'Delivery tracker sent', outcomeId: outcome.id }) }) });
     renderRoute('/');
-    expect(await screen.findByRole('link', { name: 'Plan this week' })).toHaveAttribute('href', '/plan');
-    expect(screen.queryByRole('link', { name: 'Plan your first week' })).toBeNull();
+    const card = await screen.findByRole('region', { name: 'Must Ship' });
+    expect(card).toHaveTextContent('For: Supplier plan confirmed');
+    expect(within(card).getByRole('link', { name: 'Start deep work' })).toHaveAttribute('href', '/focus');
+    expect(screen.getByRole('link', { name: '0 of 1 outcomes done' })).toHaveAttribute('href', '/week');
+    expect(screen.queryByRole('link', { name: /^Plan/ })).toBeNull();
   });
 
-  it("lists this week's outcomes instead of a banner when the week is planned", async () => {
-    api(makeLookup({ current: makeWeekView([makeOutcome({ title: 'Supplier plan confirmed', progress: 40 }), makeOutcome({ title: 'Killed', slot: null, status: 'killed' })]) }));
+  it('is the Build card at 20:00, with Close the day', async () => {
+    at('2026-09-29T15:00:00Z');
+    api({ '2026-09-29': makeDayView({ week: planned, mustShip: makeMustShip() }) });
     renderRoute('/');
-    const list = await screen.findByRole('list', { name: 'This week' });
-    expect(list).toHaveTextContent('Supplier plan confirmed');
-    expect(list).toHaveTextContent('40%');
-    expect(list).not.toHaveTextContent('Killed');
-    expect(screen.getByRole('link', { name: 'Open the week' })).toHaveAttribute('href', '/week');
-    expect(screen.queryByRole('link', { name: /Plan/ })).toBeNull();
+    const card = await screen.findByRole('region', { name: 'Build' });
+    expect(card).toHaveTextContent('Nothing planned for Build');
+    expect(card).toHaveTextContent('Build block 06:30 · 50 min');
+    expect(screen.getByRole('link', { name: 'Close the day' })).toHaveAttribute('href', '/shutdown');
+    expect(screen.queryByRole('region', { name: 'Must Ship' })).toBeNull();
+  });
+
+  it('shows tomorrow once the day is shut down', async () => {
+    at('2026-09-29T12:30:00Z');
+    const shutDown = { date: '2026-09-29', shutdownAt: '2026-09-29T12:10:00.000Z', notes: '', createdAt: '2026-09-29T12:10:00.000Z', updatedAt: '2026-09-29T12:10:00.000Z' };
+    api({
+      '2026-09-29': makeDayView({ week: planned, day: shutDown, mustShip: makeMustShip() }),
+      '2026-09-30': makeDayView({ date: '2026-09-30', mustShip: makeMustShip({ title: 'Price list approved', date: '2026-09-30' }) }),
+    });
+    renderRoute('/');
+    const card = await screen.findByRole('region', { name: 'Tomorrow' });
+    expect(await within(card).findByText('Wednesday 30 September: Price list approved')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Close the day' })).toBeNull();
+  });
+
+  it('never reads the day before the schedule, and says so when the day fails, then retries', async () => {
+    at('2026-09-29T04:00:00Z');
+    let fail = true;
+    const calls = api({ '2026-09-29': () => (fail ? failure(500, 'INTERNAL', 'internal server error') : json(makeDayView())) });
+    renderRoute('/');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not load today: internal server error');
+    const settingsAt = calls.findIndex((c) => c.url.endsWith('/settings'));
+    const dayAt = calls.findIndex((c) => c.url.includes('/days/'));
+    expect(settingsAt).toBeLessThan(dayAt);
+    fail = false;
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByRole('region', { name: "Choose today's Must Ship" })).toBeInTheDocument();
   });
 });

@@ -46,7 +46,7 @@ test('plans a week: the nudge, three outcomes, a refused fourth, and a replace',
   await expect(page.getByRole('article', { name: 'Haleon purchase target finalised' })).toHaveCount(0);
 
   await page.goto('/');
-  await expect(page.getByRole('list', { name: 'This week' })).toContainText('Supplier risks identified');
+  await expect(page.getByRole('link', { name: '0 of 3 outcomes done' })).toBeVisible();
   await expect(page.getByRole('link', { name: /^Plan (your first|this) week$/ })).toHaveCount(0);
 });
 

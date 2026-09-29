@@ -87,4 +87,16 @@ describe('Today, by the moment', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(await screen.findByRole('region', { name: "Choose today's Must Ship" })).toBeInTheDocument();
   });
+
+  it('reports a failed read of tomorrow instead of showing an empty day', async () => {
+    at('2026-09-29T12:30:00Z');
+    const shutDown = { date: '2026-09-29', shutdownAt: '2026-09-29T12:10:00.000Z', notes: '', createdAt: '2026-09-29T12:10:00.000Z', updatedAt: '2026-09-29T12:10:00.000Z' };
+    api({
+      '2026-09-29': makeDayView({ week: planned, day: shutDown, mustShip: makeMustShip() }),
+      '2026-09-30': () => failure(500, 'INTERNAL', 'internal server error'),
+    });
+    renderRoute('/');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not load tomorrow: internal server error');
+    expect(screen.queryByText('No Must Ship for Wednesday 30 September yet')).toBeNull();
+  });
 });

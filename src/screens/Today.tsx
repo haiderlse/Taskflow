@@ -24,12 +24,13 @@ export default function Today() {
     <ScreenShell title="Today">
       {settings.isError && <LoadError what="the schedule" error={settings.error} onRetry={() => void settings.refetch()} />}
       {day.isError && <LoadError what="today" error={day.error} onRetry={() => void day.refetch()} />}
+      {tomorrow.isError && <LoadError what="tomorrow" error={tomorrow.error} onRetry={() => void tomorrow.refetch()} />}
       {!loaded && !settings.isError && !day.isError && <p className="text-ink-muted">Loading today…</p>}
       {loaded && mode && (
         <>
           <TodayHeader date={today} weekStartDay={loaded.settings.weekStartDay} week={loaded.view.week} />
           <Banners banners={mode.banners} firstWeek={!loaded.view.hasHistory} />
-          <PrimaryCard mode={mode} view={loaded.view} settings={loaded.settings} tomorrow={{ date: next, mustShip: tomorrow.data?.mustShip ?? null }} />
+          <PrimaryCard mode={mode} view={loaded.view} settings={loaded.settings} tomorrow={tomorrow.isSuccess ? { date: next, mustShip: tomorrow.data.mustShip } : null} />
           <Secondaries date={loaded.view.date} secondaries={loaded.view.secondaries} />
           <Waiting today={loaded.view.date} workDays={loaded.settings.workDays} waiting={loaded.view.waiting} />
         </>

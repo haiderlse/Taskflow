@@ -85,6 +85,13 @@ describe('patchOutcome', () => {
     expect(patchOutcome(db, a.id, { status: 'active' }, T1)).toMatchObject({ status: 'active', closedAt: null, slot: 1 });
   });
 
+  it('keeps a done outcome at progress 100 when it is edited, still applying the other fields', () => {
+    const [a] = fill('A');
+    patchOutcome(db, a.id, { status: 'done' }, T1);
+    expect(patchOutcome(db, a.id, { progress: 40, title: 'A2' }, T1)).toMatchObject({ status: 'done', progress: 100, title: 'A2' });
+    expect(patchOutcome(db, a.id, { status: 'done', progress: 40 }, T1)).toMatchObject({ status: 'done', progress: 100 });
+  });
+
   it('killing frees the slot and stamps closedAt, and a killed outcome cannot be reopened', () => {
     const [a] = fill('A');
     expect(patchOutcome(db, a.id, { status: 'killed', reviewReason: 'no_longer_important' }, T1)).toMatchObject({

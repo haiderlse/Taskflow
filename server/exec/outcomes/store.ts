@@ -73,7 +73,8 @@ export function patchOutcome(db: Database.Database, id: string, patch: OutcomePa
   if (current.status === 'killed' && to !== 'killed') {
     throw new ApiError(400, 'VALIDATION', 'a killed outcome cannot be reopened; add it again');
   }
-  updateRow(db, 'outcomes', id, { ...patch, ...statusFields(current.status, to, now), updatedAt: now });
+  const doneProgress = to === 'done' ? { progress: 100 } : {};
+  updateRow(db, 'outcomes', id, { ...patch, ...statusFields(current.status, to, now), ...doneProgress, updatedAt: now });
   return getOutcome(db, id);
 }
 

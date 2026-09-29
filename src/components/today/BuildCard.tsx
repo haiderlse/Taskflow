@@ -1,12 +1,15 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { MustShipPicker } from '../mustShip/MustShipPicker';
 import type { Outcome, Settings } from '../../shared/exec/schemas';
 import type { MustShip } from '../../shared/exec/todaySchemas';
 
 type Block = Settings['buildBlocks'][number];
-type Props = { mustShip: MustShip | null; outcome: Outcome | null; block: Block | null; tomorrow: string | null };
+type Props = { mustShip: MustShip | null; outcome: Outcome | null; block: Block | null; tomorrow: string | null; date: string; outcomes: Outcome[] };
 
 /** Outside office hours and on non-work days: the build Must Ship or outcome and its block (§16). Never beside the office Must Ship. */
-export function BuildCard({ mustShip, outcome, block, tomorrow }: Props) {
+export function BuildCard({ mustShip, outcome, block, tomorrow, date, outcomes }: Props) {
+  const [setting, setSetting] = useState(false);
   const title = mustShip?.title ?? outcome?.title ?? null;
   return (
     <section aria-label="Build" className="space-y-2 rounded-lg border border-line bg-paper-raised p-5 dark:border-ink-muted dark:bg-ink">
@@ -20,6 +23,15 @@ export function BuildCard({ mustShip, outcome, block, tomorrow }: Props) {
           <Link to="/week" className="underline">Open the week</Link>
         )}
       </div>
+      {!mustShip && (
+        <div className="pt-1">
+          {setting ? (
+            <MustShipPicker date={date} context="build" outcomes={outcomes} onDone={() => setSetting(false)} />
+          ) : (
+            <button type="button" onClick={() => setSetting(true)} className="rounded border border-line px-3 py-1.5 text-sm dark:border-ink-muted">Set a build Must Ship</button>
+          )}
+        </div>
+      )}
       {tomorrow && <p className="text-sm text-ink-muted">Tomorrow: {tomorrow}</p>}
     </section>
   );

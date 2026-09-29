@@ -87,7 +87,7 @@ describe('MustShipCard', () => {
 
 describe('BuildCard and TomorrowCard', () => {
   it('shows the build Must Ship with its block and Start', () => {
-    show(<BuildCard mustShip={makeMustShip({ title: 'Landing page live', context: 'build' })} outcome={null} block={{ weekday: 2, start: '06:30', minutes: 50 }} tomorrow={null} />);
+    show(<BuildCard date="2026-09-29" outcomes={[]} mustShip={makeMustShip({ title: 'Landing page live', context: 'build' })} outcome={null} block={{ weekday: 2, start: '06:30', minutes: 50 }} tomorrow={null} />);
     const card = screen.getByRole('region', { name: 'Build' });
     expect(card).toHaveTextContent('Landing page live');
     expect(card).toHaveTextContent('Build block 06:30 · 50 min');
@@ -95,15 +95,30 @@ describe('BuildCard and TomorrowCard', () => {
   });
 
   it('falls back to a build outcome, then to nothing planned with a way to the week', () => {
-    const { unmount } = show(<BuildCard mustShip={null} outcome={makeOutcome({ title: 'Healify beta', category: 'business' })} block={null} tomorrow="Price list approved" />);
+    const { unmount } = show(<BuildCard date="2026-09-29" outcomes={[]} mustShip={null} outcome={makeOutcome({ title: 'Healify beta', category: 'business' })} block={null} tomorrow="Price list approved" />);
     expect(screen.getByRole('region', { name: 'Build' })).toHaveTextContent('Healify beta');
     expect(screen.getByText('No build block today')).toBeInTheDocument();
     expect(screen.getByText('Tomorrow: Price list approved')).toBeInTheDocument();
     unmount();
-    show(<BuildCard mustShip={null} outcome={null} block={null} tomorrow={null} />);
+    show(<BuildCard date="2026-09-29" outcomes={[]} mustShip={null} outcome={null} block={null} tomorrow={null} />);
     expect(screen.getByText('Nothing planned for Build')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open the week' })).toHaveAttribute('href', '/week');
     expect(screen.queryByRole('link', { name: 'Start' })).toBeNull();
+  });
+
+  it('offers to set a build Must Ship when there is none, and posts it for the date in the build context', async () => {
+    const calls = stubFetch((_url, init) => (init?.method === 'POST' ? json(makeMustShip({ context: 'build' }), 201) : json([])));
+    show(<BuildCard date="2026-09-29" outcomes={[]} mustShip={null} outcome={null} block={null} tomorrow={null} />);
+    expect(screen.queryByLabelText('Must Ship')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Set a build Must Ship' }));
+    await userEvent.type(await screen.findByLabelText('Must Ship'), 'Landing page live');
+    await userEvent.click(screen.getByRole('button', { name: 'Set Must Ship' }));
+    await waitFor(() => expect(calls.find((c) => c.method === 'POST')?.body).toMatchObject({ title: 'Landing page live', context: 'build', date: '2026-09-29' }));
+  });
+
+  it('offers no build Must Ship button when one is already set', () => {
+    show(<BuildCard date="2026-09-29" outcomes={[]} mustShip={makeMustShip({ title: 'Landing page live', context: 'build' })} outcome={null} block={null} tomorrow={null} />);
+    expect(screen.queryByRole('button', { name: 'Set a build Must Ship' })).toBeNull();
   });
 
   it('says tomorrow is ready, with its Must Ship or without', () => {

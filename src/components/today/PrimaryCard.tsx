@@ -19,6 +19,8 @@ export function PrimaryCard({ mode, view, settings, tomorrow }: Props) {
     return (
       <BuildCard
         mustShip={view.buildMustShip}
+        date={view.date}
+        outcomes={active.filter((outcome) => contextOf(outcome.category) === 'build')}
         outcome={active.find((outcome) => contextOf(outcome.category) === 'build') ?? null}
         block={settings.buildBlocks.find((block) => block.weekday === mode.clock.weekday) ?? null}
         tomorrow={view.day?.shutdownAt ? tomorrow?.mustShip?.title ?? null : null}

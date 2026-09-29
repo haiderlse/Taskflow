@@ -1,3 +1,4 @@
+import type { MustShipStatus } from '../shared/exec/todaySchemas';
 import type { OutcomeCategory, ProjectStatus, ReviewReason } from '../shared/exec/schemas';
 
 export const CATEGORY_LABELS: Record<OutcomeCategory, string> = {
@@ -25,4 +26,13 @@ export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
   active: 'Active',
   done: 'Done',
   archived: 'Archived',
+};
+
+export const MUST_SHIP_STATUS_LABELS: Record<MustShipStatus, string> = {
+  planned: 'Planned',
+  shipped: 'Shipped',
+  partial: 'Partial',
+  missed: 'Missed',
+  blocked: 'Blocked',
+  killed: 'Killed',
 };

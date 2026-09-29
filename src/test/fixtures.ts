@@ -1,3 +1,4 @@
+import type { DayView, MustShip } from '../shared/exec/todaySchemas';
 import type { Outcome, ProjectSummary, Settings, Task, Week, WeekLookup, WeekView } from '../shared/exec/schemas';
 
 export const SETTINGS: Settings = {
@@ -102,3 +103,43 @@ export function makeProjectSummary(overrides: Partial<ProjectSummary> = {}): Pro
     ...overrides,
   };
 }
+
+/** A work Must Ship for Tuesday 29 Sep 2026, planned, unless overridden. */
+export function makeMustShip(overrides: Partial<MustShip> = {}): MustShip {
+  counter += 1;
+  return {
+    id: `40000000-0000-4000-8000-${String(counter).padStart(12, '0')}`,
+    title: `Must Ship ${counter}`,
+    definitionOfDone: '',
+    context: 'work',
+    date: '2026-09-29',
+    outcomeId: null,
+    projectId: null,
+    status: 'planned',
+    blockerWhat: null,
+    blockerOwner: null,
+    blockerNextAction: null,
+    notes: '',
+    rolledFromId: null,
+    rollCount: 0,
+    closedAt: null,
+    createdAt: STAMP,
+    updatedAt: STAMP,
+    ...overrides,
+  };
+}
+
+/** An empty Tuesday 29 Sep 2026 as GET /days/:date returns it. */
+export const makeDayView = (overrides: Partial<DayView> = {}): DayView => ({
+  date: '2026-09-29',
+  day: null,
+  week: null,
+  hasHistory: false,
+  mustShip: null,
+  buildMustShip: null,
+  secondaries: [],
+  waiting: [],
+  blocks: [],
+  inboxCount: 0,
+  ...overrides,
+});

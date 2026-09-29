@@ -43,9 +43,15 @@ export function MustShipCard({ mustShip, outcome, outcomes, settings, mode }: Pr
       {outcome && <p className="text-sm">For: {outcome.title}</p>}
       <p className="text-sm text-ink-muted">Deep work {windowLabel(settings.deepWorkStart, settings.deepWorkMinutes)}</p>
       <div className="flex flex-wrap items-center gap-2 pt-2">
-        <Link to="/focus" className="rounded bg-ink px-3 py-1.5 text-paper dark:bg-paper dark:text-ink">
-          {mode === 'grade' ? 'Record the result' : 'Start deep work'}
-        </Link>
+        {planned && mode === 'start' && (
+          <Link to="/focus" className="rounded bg-ink px-3 py-1.5 text-paper dark:bg-paper dark:text-ink">Start deep work</Link>
+        )}
+        {planned && mode === 'grade' && (
+          <>
+            <button type="button" className="rounded bg-ink px-3 py-1.5 text-paper dark:bg-paper dark:text-ink" onClick={() => save({ status: 'shipped' })}>Mark shipped</button>
+            <Link to="/focus" className="rounded border border-line px-3 py-1.5 dark:border-ink-muted">Start another session</Link>
+          </>
+        )}
         {planned && <button type="button" className={BUTTON} onClick={() => setEditing(true)}>Edit</button>}
         {planned && <button type="button" className={BUTTON} onClick={() => save({ date: null })}>Put back</button>}
       </div>

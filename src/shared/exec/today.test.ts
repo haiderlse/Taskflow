@@ -83,6 +83,10 @@ describe('todayMode: the primary card (spec C, first match wins)', () => {
   it('treats every day as a Build day when there are no work days', () => {
     expect(todayMode(at('2026-09-29', '10:00'), { ...SETTINGS, workDays: [] }, view()).primary).toEqual({ kind: 'build' });
   });
+  it('resumes only a live work block: a live build block leaves the Must Ship card to say Start', () => {
+    const build = block({ context: 'build', mustShipId: null, startedAt: '2026-09-29T03:40:00.000Z' });
+    expect(todayMode(at('2026-09-29', '09:00'), SETTINGS, view({ mustShip: mustShip(), blocks: [build] })).primary).toEqual({ kind: 'start', mustShipId: MS_ID });
+  });
 });
 
 describe('todayMode: banners', () => {

@@ -3,7 +3,7 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderRoute } from '../test/render';
 import { stubFetch, json, failure } from '../test/fetch';
-import { SETTINGS, makeDayView, makeMustShip, makeOutcome, makeWeekView } from '../test/fixtures';
+import { SETTINGS, makeBlock, makeDayView, makeMustShip, makeOutcome, makeWeekView } from '../test/fixtures';
 import type { DayView } from '../shared/exec/todaySchemas';
 
 afterEach(() => {
@@ -98,5 +98,23 @@ describe('Today, by the moment', () => {
     renderRoute('/');
     expect(await screen.findByRole('alert')).toHaveTextContent('Could not load tomorrow: internal server error');
     expect(screen.queryByText('No Must Ship for Wednesday 30 September yet')).toBeNull();
+  });
+
+  it('names the Must Ship on the resume card while a session is live', async () => {
+    at('2026-09-29T04:00:00Z');
+    const ship = makeMustShip({ title: 'Delivery tracker sent' });
+    api({ '2026-09-29': makeDayView({ week: planned, mustShip: ship, blocks: [makeBlock({ mustShipId: ship.id, startedAt: '2026-09-29T03:40:00.000Z' })] }) });
+    renderRoute('/');
+    const card = await screen.findByRole('region', { name: 'Focus' });
+    expect(card).toHaveTextContent('Delivery tracker sent');
+    expect(within(card).getByRole('link', { name: 'Resume focus' })).toHaveAttribute('href', '/focus');
+  });
+
+  it('resumes a session that runs past office hours from the Build card', async () => {
+    at('2026-09-29T13:30:00Z');
+    api({ '2026-09-29': makeDayView({ week: planned, blocks: [makeBlock({ startedAt: '2026-09-29T12:50:00.000Z' })] }) });
+    renderRoute('/');
+    const card = await screen.findByRole('region', { name: 'Build' });
+    expect(within(card).getByRole('link', { name: 'Resume focus' })).toHaveAttribute('href', '/focus');
   });
 });

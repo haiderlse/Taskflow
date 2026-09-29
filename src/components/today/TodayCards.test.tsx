@@ -10,7 +10,7 @@ import { BuildCard } from './BuildCard';
 import { TomorrowCard } from './TomorrowCard';
 import { renderWithProviders } from '../../test/render';
 import { stubFetch, json } from '../../test/fetch';
-import { SETTINGS, makeMustShip, makeOutcome, makeWeekView } from '../../test/fixtures';
+import { SETTINGS, makeBlock, makeMustShip, makeOutcome, makeWeekView } from '../../test/fixtures';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -63,11 +63,15 @@ describe('MustShipCard', () => {
 
   it('asks for the result once its block has ended, and shows a closed status without edits', () => {
     const { unmount } = show(<MustShipCard mustShip={makeMustShip()} outcome={null} outcomes={[]} settings={SETTINGS} mode="grade" />);
-    expect(screen.getByRole('link', { name: 'Record the result' })).toHaveAttribute('href', '/focus');
+    expect(screen.getByRole('button', { name: 'Mark shipped' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Start another session' })).toHaveAttribute('href', '/focus');
+    expect(screen.queryByRole('link', { name: 'Start deep work' })).toBeNull();
     unmount();
     show(<MustShipCard mustShip={makeMustShip({ status: 'shipped' })} outcome={null} outcomes={[]} settings={SETTINGS} mode="start" />);
     expect(screen.getByText('Shipped')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Put back' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Start deep work' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Mark shipped' })).toBeNull();
   });
 
   it('puts a planned Must Ship back among the candidates, and edits it in place', async () => {
@@ -83,9 +87,24 @@ describe('MustShipCard', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save Must Ship' }));
     await waitFor(() => expect(calls.filter((c) => c.method === 'PATCH').at(-1)?.body).toEqual({ title: 'Delivery tracker sent to all', definitionOfDone: '', outcomeId: null }));
   });
+
+  it('marks a Must Ship shipped from the grade card', async () => {
+    const mustShip = makeMustShip({ title: 'Delivery tracker sent' });
+    const calls = stubFetch(() => json(mustShip));
+    show(<MustShipCard mustShip={mustShip} outcome={null} outcomes={[]} settings={SETTINGS} mode="grade" />);
+    await userEvent.click(screen.getByRole('button', { name: 'Mark shipped' }));
+    await waitFor(() => expect(calls.find((call) => call.method === 'PATCH')).toMatchObject({ url: `/api/exec/must-ships/${mustShip.id}`, body: { status: 'shipped' } }));
+  });
 });
 
 describe('BuildCard and TomorrowCard', () => {
+  it('offers to resume a live session instead of starting one', () => {
+    const live = makeBlock({ context: 'build', startedAt: '2026-09-29T01:40:00.000Z' });
+    show(<BuildCard mustShip={makeMustShip({ title: 'Landing page live', context: 'build' })} outcome={null} block={null} tomorrow={null} date="2026-09-29" outcomes={[]} live={live} />);
+    expect(screen.getByRole('link', { name: 'Resume focus' })).toHaveAttribute('href', '/focus');
+    expect(screen.queryByRole('link', { name: 'Start' })).toBeNull();
+  });
+
   it('shows the build Must Ship with its block and Start', () => {
     show(<BuildCard date="2026-09-29" outcomes={[]} mustShip={makeMustShip({ title: 'Landing page live', context: 'build' })} outcome={null} block={{ weekday: 2, start: '06:30', minutes: 50 }} tomorrow={null} />);
     const card = screen.getByRole('region', { name: 'Build' });

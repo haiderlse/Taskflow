@@ -2,13 +2,13 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { MustShipPicker } from '../mustShip/MustShipPicker';
 import type { Outcome, Settings } from '../../shared/exec/schemas';
-import type { MustShip } from '../../shared/exec/todaySchemas';
+import type { DeepWorkBlock, MustShip } from '../../shared/exec/todaySchemas';
 
 type Block = Settings['buildBlocks'][number];
-type Props = { mustShip: MustShip | null; outcome: Outcome | null; block: Block | null; tomorrow: string | null; date: string; outcomes: Outcome[] };
+type Props = { mustShip: MustShip | null; outcome: Outcome | null; block: Block | null; tomorrow: string | null; date: string; outcomes: Outcome[]; live?: DeepWorkBlock | null };
 
 /** Outside office hours and on non-work days: the build Must Ship or outcome and its block (§16). Never beside the office Must Ship. */
-export function BuildCard({ mustShip, outcome, block, tomorrow, date, outcomes }: Props) {
+export function BuildCard({ mustShip, outcome, block, tomorrow, date, outcomes, live = null }: Props) {
   const [setting, setSetting] = useState(false);
   const title = mustShip?.title ?? outcome?.title ?? null;
   return (
@@ -17,7 +17,9 @@ export function BuildCard({ mustShip, outcome, block, tomorrow, date, outcomes }
       {title ? <h2 className="text-2xl font-semibold">{title}</h2> : <h2 className="text-xl">Nothing planned for Build</h2>}
       <p className="text-sm text-ink-muted">{block ? `Build block ${block.start} · ${block.minutes} min` : 'No build block today'}</p>
       <div className="pt-1">
-        {title ? (
+        {live ? (
+          <Link to="/focus" className="rounded bg-ink px-3 py-1.5 text-paper dark:bg-paper dark:text-ink">Resume focus</Link>
+        ) : title ? (
           <Link to="/focus" className="rounded bg-ink px-3 py-1.5 text-paper dark:bg-paper dark:text-ink">Start</Link>
         ) : (
           <Link to="/week" className="underline">Open the week</Link>

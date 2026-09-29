@@ -24,6 +24,7 @@ export function PrimaryCard({ mode, view, settings, tomorrow }: Props) {
         outcome={active.find((outcome) => contextOf(outcome.category) === 'build') ?? null}
         block={settings.buildBlocks.find((block) => block.weekday === mode.clock.weekday) ?? null}
         tomorrow={view.day?.shutdownAt ? tomorrow?.mustShip?.title ?? null : null}
+        live={view.blocks.find((block) => block.startedAt !== null && block.endedAt === null) ?? null}
       />
     );
   }
@@ -31,8 +32,10 @@ export function PrimaryCard({ mode, view, settings, tomorrow }: Props) {
   if (primary.kind === 'choose') return <ChooseMustShip date={view.date} outcomes={work} />;
   if (primary.kind === 'resume') {
     return (
-      <section aria-label="Focus" className="rounded-lg border border-line p-5 dark:border-ink-muted">
-        <Link to="/focus" className="text-lg underline">Resume focus</Link>
+      <section aria-label="Focus" className="space-y-2 rounded-lg border border-line p-5 dark:border-ink-muted">
+        <p className="text-xs uppercase tracking-wide text-ink-muted">Deep work in progress</p>
+        {view.mustShip && <h2 className="text-2xl font-semibold">{view.mustShip.title}</h2>}
+        <Link to="/focus" className="inline-block rounded bg-ink px-3 py-1.5 text-paper dark:bg-paper dark:text-ink">Resume focus</Link>
       </section>
     );
   }

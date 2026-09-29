@@ -42,7 +42,7 @@ function primaryFor(clock: LocalClock, settings: Settings, view: DayView): Prima
   if (view.day?.shutdownAt) return { kind: 'tomorrow' };
   const mustShip = view.mustShip;
   if (!mustShip) return { kind: 'choose' };
-  const live = view.blocks.find((block) => block.startedAt !== null && block.endedAt === null);
+  const live = view.blocks.find((block) => block.context === 'work' && block.startedAt !== null && block.endedAt === null);
   if (live) return { kind: 'resume', blockId: live.id };
   const ended = view.blocks.some((block) => block.mustShipId === mustShip.id && block.endedAt !== null);
   if (ended && mustShip.status === 'planned') return { kind: 'grade', mustShipId: mustShip.id };

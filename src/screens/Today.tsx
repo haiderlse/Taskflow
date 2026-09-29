@@ -4,6 +4,8 @@ import { LoadError } from '../components/LoadError';
 import { TodayHeader } from '../components/today/TodayHeader';
 import { Banners } from '../components/today/Banners';
 import { PrimaryCard } from '../components/today/PrimaryCard';
+import { Secondaries } from '../components/today/Secondaries';
+import { Waiting } from '../components/today/Waiting';
 import { useDay } from '../api/days';
 import { useSettings } from '../api/settings';
 import { useToday } from '../lib/useToday';
@@ -28,6 +30,8 @@ export default function Today() {
           <TodayHeader date={today} weekStartDay={loaded.settings.weekStartDay} week={loaded.view.week} />
           <Banners banners={mode.banners} firstWeek={!loaded.view.hasHistory} />
           <PrimaryCard mode={mode} view={loaded.view} settings={loaded.settings} tomorrow={{ date: next, mustShip: tomorrow.data?.mustShip ?? null }} />
+          <Secondaries date={loaded.view.date} secondaries={loaded.view.secondaries} />
+          <Waiting today={loaded.view.date} workDays={loaded.settings.workDays} waiting={loaded.view.waiting} />
         </>
       )}
       <div className="sticky bottom-20 pt-6 md:bottom-6">

@@ -3,11 +3,11 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderRoute } from '../test/render';
 import { stubFetch, json } from '../test/fetch';
-import { SETTINGS } from '../test/fixtures';
+import { SETTINGS, makeDayView } from '../test/fixtures';
 
 afterEach(() => vi.unstubAllGlobals());
 
-const ok = () => stubFetch((url) => (url.endsWith('/settings') ? json(SETTINGS) : json([])));
+const ok = () => stubFetch((url) => (url.endsWith('/settings') ? json(SETTINGS) : url.includes('/days/') ? json(makeDayView()) : json([])));
 
 describe('the c key', () => {
   it('opens the capture dialog on a screen without a capture bar', async () => {

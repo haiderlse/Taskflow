@@ -1,6 +1,7 @@
 import { useCreateMustShip, useMustShips, useUpdateMustShip } from '../../api/mustShips';
 import { useReportError } from '../../api/errors';
 import type { Context, Outcome } from '../../shared/exec/schemas';
+import { LoadError } from '../LoadError';
 import { MustShipForm } from './MustShipForm';
 
 type Props = { date: string; context: Context; outcomes: Outcome[]; onDone?: () => void };
@@ -15,7 +16,9 @@ export function MustShipPicker({ date, context, outcomes, onDone }: Props) {
   const list = candidates.data ?? [];
   return (
     <div className="space-y-4">
-      {list.length > 0 && (
+      {candidates.isError && <LoadError what="candidates" error={candidates.error} onRetry={() => void candidates.refetch()} />}
+      {candidates.isPending && <p className="text-sm text-ink-muted">Loading candidates…</p>}
+      {candidates.isSuccess && list.length > 0 && (
         <ul aria-label="Candidates" className="space-y-1">
           {list.map((candidate) => (
             <li key={candidate.id} className="flex items-center justify-between gap-3 border-t border-line py-2 dark:border-ink-muted">

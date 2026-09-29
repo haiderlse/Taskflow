@@ -3,7 +3,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MustShipPicker } from './MustShipPicker';
 import { renderWithProviders } from '../../test/render';
-import { stubFetch, json } from '../../test/fetch';
+import { stubFetch, json, failure } from '../../test/fetch';
 import { makeMustShip } from '../../test/fixtures';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -44,5 +44,13 @@ describe('MustShipPicker', () => {
     await userEvent.type(await screen.findByLabelText('Must Ship'), 'Second one');
     await userEvent.click(screen.getByRole('button', { name: 'Set Must Ship' }));
     expect(await screen.findByRole('status')).toHaveTextContent('Could not set the Must Ship: that day already has a Must Ship');
+  });
+
+  it('says so when the candidates cannot be read, and still lets you write one', async () => {
+    stubFetch(() => failure(500, 'INTERNAL', 'internal server error'));
+    renderWithProviders(<MustShipPicker date="2026-09-29" context="work" outcomes={[]} />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not load candidates: internal server error');
+    expect(screen.getByLabelText('Must Ship')).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Candidates' })).toBeNull();
   });
 });

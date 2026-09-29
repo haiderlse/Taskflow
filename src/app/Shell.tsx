@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { Link, NavLink, Outlet } from 'react-router-dom';
 import { ApiStatus } from '../components/ApiStatus';
 import { CaptureShortcut } from '../components/CaptureShortcut';
 
@@ -28,6 +28,9 @@ export function Shell() {
         ))}
       </nav>
       <main className="flex-1 space-y-4 px-4 pb-24 pt-6 md:px-10 md:pb-10">
+        <div className="flex justify-end">
+          <Link to="/settings" className="text-sm text-ink-muted hover:text-ink dark:hover:text-paper">Settings</Link>
+        </div>
         <ApiStatus />
         <CaptureShortcut />
         <Outlet />

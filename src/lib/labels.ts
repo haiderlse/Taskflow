@@ -36,3 +36,5 @@ export const MUST_SHIP_STATUS_LABELS: Record<MustShipStatus, string> = {
   blocked: 'Blocked',
   killed: 'Killed',
 };
+
+export const WEEKDAY_NAMES: readonly string[] = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];

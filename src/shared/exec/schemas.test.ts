@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { taskCreateSchema, taskPatchSchema, taskRollSchema, taskListQuerySchema, settingsSchema, taskSchema } from './schemas';
+import { taskCreateSchema, taskPatchSchema, taskRollSchema, taskListQuerySchema, settingsSchema, taskSchema, outcomeCreateSchema, outcomePatchSchema, outcomeRollSchema, weekQuerySchema, projectCreateSchema, projectPatchSchema, outcomeSchema } from './schemas';
 
 const issuePaths = (result: { success: boolean; error?: { issues: { path: PropertyKey[] }[] } }) =>
   result.success ? [] : (result.error?.issues ?? []).map((issue) => issue.path.join('.'));
@@ -94,5 +94,80 @@ describe('settingsSchema and taskSchema', () => {
     };
     expect(issuePaths(taskSchema.safeParse(row))).toEqual(['capturedAt']);
     expect(taskSchema.safeParse({ ...row, capturedAt: row.createdAt }).success).toBe(true);
+  });
+});
+
+describe('outcome schemas', () => {
+  it('trims the title and fills defaults on create', () => {
+    expect(outcomeCreateSchema.parse({ title: '  Supplier plan confirmed ', category: 'office' })).toEqual({
+      title: 'Supplier plan confirmed',
+      category: 'office',
+      description: '',
+      definitionOfDone: '',
+      targetDate: null,
+      projectId: null,
+      notes: '',
+    });
+  });
+
+  it('accepts a replace instruction and rejects a bad one', () => {
+    const replace = { outcomeId: '4f5a1b3c-2d7e-4c9a-8b1f-0a2b3c4d5e6f', reason: 'priority_changed' };
+    expect(outcomeCreateSchema.parse({ title: 'x', category: 'career', replace }).replace).toEqual(replace);
+    expect(issuePaths(outcomeCreateSchema.safeParse({ title: 'x', category: 'career', replace: { ...replace, reason: 'bored' } }))).toEqual(['replace.reason']);
+  });
+
+  it('rejects an unknown category, a blank title and unknown keys', () => {
+    expect(issuePaths(outcomeCreateSchema.safeParse({ title: 'x', category: 'hobby' }))).toEqual(['category']);
+    expect(issuePaths(outcomeCreateSchema.safeParse({ title: ' ', category: 'office' }))).toEqual(['title']);
+    expect(issuePaths(outcomeCreateSchema.safeParse({ title: 'x', category: 'office', slot: 4 }))).toEqual(['']);
+  });
+
+  it('patches partially, bounds progress and never accepts a slot or timestamp', () => {
+    expect(outcomePatchSchema.parse({ progress: 60 })).toEqual({ progress: 60 });
+    expect(outcomePatchSchema.safeParse({}).success).toBe(false);
+    expect(issuePaths(outcomePatchSchema.safeParse({ progress: 101 }))).toEqual(['progress']);
+    expect(outcomePatchSchema.safeParse({ slot: 1 }).success).toBe(false);
+    expect(outcomePatchSchema.safeParse({ closedAt: '2026-09-22T03:00:00.000Z' }).success).toBe(false);
+  });
+
+  it('rolls into a week by id and looks weeks up by a calendar date', () => {
+    expect(outcomeRollSchema.safeParse({ weekId: 'w1' }).success).toBe(false);
+    expect(weekQuerySchema.parse({ date: '2026-09-22' })).toEqual({ date: '2026-09-22' });
+    expect(weekQuerySchema.safeParse({ date: '2026-09-31' }).success).toBe(false);
+  });
+
+  it('parses an outcome row as the server returns it', () => {
+    const row = {
+      id: '4f5a1b3c-2d7e-4c9a-8b1f-0a2b3c4d5e6f',
+      weekId: '5f5a1b3c-2d7e-4c9a-8b1f-0a2b3c4d5e6f',
+      slot: 1,
+      title: 'x',
+      description: '',
+      category: 'office',
+      definitionOfDone: '',
+      targetDate: '2026-09-25',
+      projectId: null,
+      progress: 0,
+      status: 'active',
+      reviewGrade: null,
+      reviewReason: null,
+      reviewDisposition: null,
+      rolledFromId: null,
+      notes: '',
+      closedAt: null,
+      createdAt: '2026-09-22T03:00:00.000Z',
+      updatedAt: '2026-09-22T03:00:00.000Z',
+    };
+    expect(outcomeSchema.safeParse(row).success).toBe(true);
+    expect(outcomeSchema.safeParse({ ...row, slot: 4 }).success).toBe(false);
+  });
+});
+
+describe('project schemas', () => {
+  it('creates with a trimmed name and patches the status', () => {
+    expect(projectCreateSchema.parse({ name: ' Supply plan ', context: 'work' })).toEqual({ name: 'Supply plan', context: 'work', notes: '' });
+    expect(projectPatchSchema.parse({ status: 'archived' })).toEqual({ status: 'archived' });
+    expect(issuePaths(projectPatchSchema.safeParse({ status: 'paused' }))).toEqual(['status']);
+    expect(projectPatchSchema.safeParse({}).success).toBe(false);
   });
 });

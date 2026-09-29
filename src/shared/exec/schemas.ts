@@ -103,13 +103,159 @@ export const settingsSchema = z.object({
 });
 export type Settings = z.infer<typeof settingsSchema>;
 
+export const PROJECT_STATUSES = ['active', 'done', 'archived'] as const;
+export const projectStatusSchema = z.enum(PROJECT_STATUSES);
+export type ProjectStatus = z.infer<typeof projectStatusSchema>;
+
 export const projectSchema = z.object({
   id: uuid,
   name: z.string(),
   context: contextSchema,
-  status: z.enum(['active', 'done', 'archived']),
+  status: projectStatusSchema,
   notes: z.string(),
   createdAt: timestamp,
   updatedAt: timestamp,
 });
 export type Project = z.infer<typeof projectSchema>;
+
+// ---- Weeks, outcomes and projects (Phase 3) ----
+
+export const OUTCOME_CATEGORIES = ['office', 'business', 'career', 'personal'] as const;
+export const outcomeCategorySchema = z.enum(OUTCOME_CATEGORIES);
+export type OutcomeCategory = z.infer<typeof outcomeCategorySchema>;
+
+export const OUTCOME_STATUSES = ['active', 'done', 'killed'] as const;
+const outcomeStatusSchema = z.enum(OUTCOME_STATUSES);
+export type OutcomeStatus = z.infer<typeof outcomeStatusSchema>;
+
+export const REVIEW_GRADES = ['done', 'partial', 'missed'] as const;
+export const REVIEW_REASONS = [
+  'insufficient_time',
+  'unexpected_urgent_work',
+  'dependency_blocker',
+  'poor_estimation',
+  'too_many_meetings',
+  'priority_changed',
+  'procrastination',
+  'unclear_outcome',
+  'delegated_dependency',
+  'no_longer_important',
+  'other',
+] as const;
+export const reviewReasonSchema = z.enum(REVIEW_REASONS);
+export type ReviewReason = z.infer<typeof reviewReasonSchema>;
+export const REVIEW_DISPOSITIONS = ['roll_forward', 'reschedule', 'delegate', 'kill'] as const;
+
+const outcomeTitle = z.string().trim().min(1, 'title is required').max(200, 'title is too long');
+const longText = z.string().max(4000, 'text is too long');
+
+export const weekSchema = z.object({
+  id: uuid,
+  startDate: calendarDateSchema,
+  reviewedAt: timestamp.nullable(),
+  reviewNotes: z.string(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+export type Week = z.infer<typeof weekSchema>;
+
+export const outcomeSchema = z.object({
+  id: uuid,
+  weekId: uuid,
+  slot: z.number().int().min(1).max(3).nullable(),
+  title: z.string(),
+  description: z.string(),
+  category: outcomeCategorySchema,
+  definitionOfDone: z.string(),
+  targetDate: calendarDateSchema.nullable(),
+  projectId: uuid.nullable(),
+  progress: z.number().int().min(0).max(100),
+  status: outcomeStatusSchema,
+  reviewGrade: z.enum(REVIEW_GRADES).nullable(),
+  reviewReason: reviewReasonSchema.nullable(),
+  reviewDisposition: z.enum(REVIEW_DISPOSITIONS).nullable(),
+  rolledFromId: uuid.nullable(),
+  notes: z.string(),
+  closedAt: timestamp.nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+export type Outcome = z.infer<typeof outcomeSchema>;
+
+export const weekViewSchema = z.object({ week: weekSchema, outcomes: z.array(outcomeSchema) });
+export type WeekView = z.infer<typeof weekViewSchema>;
+
+export const weekLookupSchema = z.object({
+  current: weekViewSchema.nullable(),
+  previous: weekViewSchema.nullable(),
+  hasHistory: z.boolean(),
+});
+export type WeekLookup = z.infer<typeof weekLookupSchema>;
+
+export const weekQuerySchema = z.strictObject({ date: calendarDateSchema });
+export const weekCreateSchema = z.strictObject({ date: calendarDateSchema });
+
+export const outcomeCreateSchema = z.strictObject({
+  title: outcomeTitle,
+  category: outcomeCategorySchema,
+  description: longText.default(''),
+  definitionOfDone: longText.default(''),
+  targetDate: calendarDateSchema.nullable().default(null),
+  projectId: uuid.nullable().default(null),
+  notes: longText.default(''),
+  replace: z.strictObject({ outcomeId: uuid, reason: reviewReasonSchema }).optional(),
+});
+export type OutcomeCreate = z.infer<typeof outcomeCreateSchema>;
+export type OutcomeInput = z.input<typeof outcomeCreateSchema>;
+
+/** Slot, lineage and timestamps are never client-writable; status changes set them. */
+export const outcomePatchSchema = z
+  .strictObject({
+    title: outcomeTitle.optional(),
+    description: longText.optional(),
+    category: outcomeCategorySchema.optional(),
+    definitionOfDone: longText.optional(),
+    targetDate: calendarDateSchema.nullable().optional(),
+    projectId: uuid.nullable().optional(),
+    progress: z.number().int().min(0).max(100).optional(),
+    status: outcomeStatusSchema.optional(),
+    reviewGrade: z.enum(REVIEW_GRADES).nullable().optional(),
+    reviewReason: reviewReasonSchema.nullable().optional(),
+    reviewDisposition: z.enum(REVIEW_DISPOSITIONS).nullable().optional(),
+    notes: longText.optional(),
+  })
+  .refine((patch) => Object.keys(patch).length > 0, 'nothing to change');
+export type OutcomePatch = z.infer<typeof outcomePatchSchema>;
+
+export const outcomeRollSchema = z.strictObject({ weekId: uuid });
+
+export const projectCreateSchema = z.strictObject({
+  name: z.string().trim().min(1, 'name is required').max(120, 'name is too long'),
+  context: contextSchema,
+  notes: longText.default(''),
+});
+export type ProjectCreate = z.infer<typeof projectCreateSchema>;
+export type ProjectInput = z.input<typeof projectCreateSchema>;
+
+export const projectPatchSchema = z
+  .strictObject({
+    name: z.string().trim().min(1, 'name is required').max(120, 'name is too long').optional(),
+    context: contextSchema.optional(),
+    status: projectStatusSchema.optional(),
+    notes: longText.optional(),
+  })
+  .refine((patch) => Object.keys(patch).length > 0, 'nothing to change');
+export type ProjectPatch = z.infer<typeof projectPatchSchema>;
+
+export const projectSummarySchema = projectSchema.extend({
+  activeOutcomes: z.number().int().nonnegative(),
+  openTasks: z.number().int().nonnegative(),
+});
+export type ProjectSummary = z.infer<typeof projectSummarySchema>;
+
+export const projectDetailSchema = z.object({
+  project: projectSchema,
+  outcomes: z.array(outcomeSchema.extend({ weekStartDate: calendarDateSchema })),
+  tasks: z.array(taskSchema),
+});
+export type ProjectDetail = z.infer<typeof projectDetailSchema>;

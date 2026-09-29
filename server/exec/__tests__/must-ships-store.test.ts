@@ -79,6 +79,12 @@ describe('listMustShips', () => {
     expect(titles({ context: 'build' })).toEqual(['Build Tuesday']);
     expect(titles({ status: ['shipped'] })).toEqual([]);
   });
+
+  it('lists undated candidates newest first whatever their context', () => {
+    createMustShip(db, input('Older work candidate', { date: null }), T0);
+    createMustShip(db, input('Newer build candidate', { date: null, context: 'build' }), T1);
+    expect(listMustShips(db, { date: 'none' }).map((mustShip) => mustShip.title)).toEqual(['Newer build candidate', 'Older work candidate']);
+  });
 });
 
 describe('patchMustShip', () => {

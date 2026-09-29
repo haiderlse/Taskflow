@@ -15,7 +15,7 @@ export function getMustShip(db: Database.Database, id: string): MustShip | null 
   return row ? toEntity<MustShip>(row) : null;
 }
 
-/** Candidates first, newest first; then dated Must Ships by date and context. Filters combine with AND. */
+/** Candidates first, newest first; then dated Must Ships by date, work before build. Context only orders dated rows. Filters combine with AND. */
 export function listMustShips(db: Database.Database, query: MustShipQuery, weekStartDay = 0): MustShip[] {
   const clauses: string[] = [];
   const params: Bindable[] = [];
@@ -47,7 +47,7 @@ export function listMustShips(db: Database.Database, query: MustShipQuery, weekS
   }
   const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
   return db
-    .prepare(`SELECT * FROM must_ships ${where} ORDER BY date IS NOT NULL, date, context DESC, created_at DESC, id`)
+    .prepare(`SELECT * FROM must_ships ${where} ORDER BY date IS NOT NULL, date, CASE WHEN date IS NULL THEN '' ELSE context END DESC, created_at DESC, id`)
     .all(...params)
     .map((row) => toEntity<MustShip>(row));
 }

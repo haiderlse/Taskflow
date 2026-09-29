@@ -6,6 +6,7 @@ import Today from '../screens/Today';
 import Week from '../screens/Week';
 import Inbox from '../screens/Inbox';
 import Projects from '../screens/Projects';
+import ProjectDetail from '../screens/ProjectDetail';
 import Review from '../screens/Review';
 import Focus from '../screens/Focus';
 import Shutdown from '../screens/Shutdown';
@@ -25,6 +26,7 @@ export const routes: RouteObject[] = [
       { path: 'week', element: <Week /> },
       { path: 'inbox', element: <Inbox /> },
       { path: 'projects', element: <Projects /> },
+      { path: 'projects/:id', element: <ProjectDetail /> },
       { path: 'review', element: <Review /> },
       { path: '*', element: <NotFound /> },
     ],

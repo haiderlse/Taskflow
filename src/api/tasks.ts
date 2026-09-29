@@ -2,8 +2,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Context, Task, TaskPatch, TaskStatus } from '../shared/exec/schemas';
 import { api, ApiError } from './client';
 import { toQueryString } from './query';
+import { daysKey, tasksKey } from './keys';
 
-export const tasksKey = ['exec', 'tasks'] as const;
+export { tasksKey };
 
 export type TaskFilters = { status?: TaskStatus[]; context?: Context; week?: string; followUpBy?: string };
 export type CaptureInput = { title: string; context: Context; notes?: string };
@@ -15,12 +16,12 @@ export function useTasks(filters: TaskFilters = {}) {
   return useQuery<Task[], ApiError>({ queryKey: [...tasksKey, filters], queryFn: () => api.get<Task[]>(taskListPath(filters)) });
 }
 
-/** Every write invalidates every tasks query, so lists refresh without bookkeeping. */
+/** Every write invalidates every tasks query and the day, so lists and Today refresh without bookkeeping. */
 function useTasksMutation<TVariables, TData>(mutationFn: (variables: TVariables) => Promise<TData>) {
   const queryClient = useQueryClient();
   return useMutation<TData, ApiError, TVariables>({
     mutationFn,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: tasksKey }),
+    onSuccess: () => Promise.all([queryClient.invalidateQueries({ queryKey: tasksKey }), queryClient.invalidateQueries({ queryKey: daysKey })]),
   });
 }
 

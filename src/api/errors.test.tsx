@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { renderHook, act, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { ApiError } from './client';
-import { errorMessage, useReportError, weekFullOutcomes } from './errors';
+import { dayTakenMustShip, errorMessage, useReportError, weekFullOutcomes } from './errors';
 import { ToastProvider } from '../components/Toast';
 import { makeOutcome } from '../test/fixtures';
 
@@ -29,5 +29,15 @@ describe('weekFullOutcomes', () => {
     expect(weekFullOutcomes(new ApiError(409, 'WEEK_FULL', 'full', { outcomes }))).toEqual(outcomes);
     expect(weekFullOutcomes(new ApiError(400, 'VALIDATION', 'bad'))).toBeNull();
     expect(weekFullOutcomes(new Error('boom'))).toBeNull();
+  });
+});
+
+describe('DAY_TAKEN and SLOT_LIMIT', () => {
+  it('speaks plainly and hands back the Must Ship holding the day', () => {
+    const taken = new ApiError(409, 'DAY_TAKEN', 'that day already has a must ship', { mustShip: { title: 'First' } });
+    expect(errorMessage(taken)).toBe('that day already has a Must Ship');
+    expect(errorMessage(new ApiError(400, 'SLOT_LIMIT', 'x'))).toBe('a day holds at most two secondary tasks');
+    expect(dayTakenMustShip(taken)).toEqual({ title: 'First' });
+    expect(dayTakenMustShip(new ApiError(409, 'WEEK_FULL', 'x'))).toBeNull();
   });
 });

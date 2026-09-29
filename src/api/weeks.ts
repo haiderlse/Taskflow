@@ -2,9 +2,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Outcome, OutcomeInput, OutcomePatch, WeekLookup, WeekView } from '../shared/exec/schemas';
 import { api, ApiError } from './client';
 import { toQueryString } from './query';
-import { projectsKey } from './projects';
+import { daysKey, projectsKey, weeksKey } from './keys';
 
-export const weeksKey = ['exec', 'weeks'] as const;
+export { weeksKey };
 
 export type AddOutcomeVariables = { date: string; weekId?: string; input: OutcomeInput };
 export type RollOutcomeVariables = { id: string; date: string; weekId?: string };
@@ -18,13 +18,12 @@ export function useWeekLookup(date: string, { enabled = true }: { enabled?: bool
   });
 }
 
-/** Weeks and projects both show outcomes, so every outcome write refreshes both. */
+/** Weeks, projects and Today all show outcomes, so every outcome write refreshes all three. */
 function useOutcomeMutation<TVariables, TData>(mutationFn: (variables: TVariables) => Promise<TData>) {
   const queryClient = useQueryClient();
   return useMutation<TData, ApiError, TVariables>({
     mutationFn,
-    onSuccess: () =>
-      Promise.all([queryClient.invalidateQueries({ queryKey: weeksKey }), queryClient.invalidateQueries({ queryKey: projectsKey })]),
+    onSuccess: () => Promise.all([weeksKey, projectsKey, daysKey].map((queryKey) => queryClient.invalidateQueries({ queryKey }))),
   });
 }
 

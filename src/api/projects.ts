@@ -1,10 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Project, ProjectDetail, ProjectInput, ProjectPatch, ProjectSummary } from '../shared/exec/schemas';
 import { api, ApiError } from './client';
+import { projectsKey, weeksKey } from './keys';
 
-export const projectsKey = ['exec', 'projects'] as const;
-// Kept literal here: weeks.ts imports projectsKey, so importing weeksKey back would be a cycle.
-const weeksKey = ['exec', 'weeks'] as const;
+export { projectsKey };
 
 export function useProjects() {
   return useQuery<ProjectSummary[], ApiError>({ queryKey: projectsKey, queryFn: () => api.get<ProjectSummary[]>('/projects') });

@@ -8,6 +8,7 @@ import { Banners } from './Banners';
 import { MustShipCard } from './MustShipCard';
 import { BuildCard } from './BuildCard';
 import { TomorrowCard } from './TomorrowCard';
+import { MUST_SHIP_STATUS_LABELS } from '../../lib/labels';
 import { renderWithProviders } from '../../test/render';
 import { stubFetch, json } from '../../test/fetch';
 import { SETTINGS, makeBlock, makeMustShip, makeOutcome, makeWeekView } from '../../test/fixtures';
@@ -111,6 +112,24 @@ describe('BuildCard and TomorrowCard', () => {
     expect(card).toHaveTextContent('Landing page live');
     expect(card).toHaveTextContent('Build block 06:30 · 50 min');
     expect(within(card).getByRole('link', { name: 'Start' })).toHaveAttribute('href', '/focus');
+  });
+
+  it('shows the status and no Start link when the build Must Ship is not planned', () => {
+    for (const status of ['blocked', 'shipped', 'killed'] as const) {
+      const { unmount } = show(<BuildCard date="2026-09-29" outcomes={[]} mustShip={makeMustShip({ title: 'Landing page live', context: 'build', status })} outcome={null} block={null} tomorrow={null} />);
+      const card = screen.getByRole('region', { name: 'Build' });
+      expect(card).toHaveTextContent(MUST_SHIP_STATUS_LABELS[status]);
+      expect(within(card).queryByRole('link', { name: 'Start' })).toBeNull();
+      expect(within(card).queryByRole('link', { name: 'Resume focus' })).toBeNull();
+      unmount();
+    }
+  });
+
+  it('shows no status badge and a Start link while the build Must Ship is planned', () => {
+    show(<BuildCard date="2026-09-29" outcomes={[]} mustShip={makeMustShip({ title: 'Landing page live', context: 'build' })} outcome={null} block={null} tomorrow={null} />);
+    const card = screen.getByRole('region', { name: 'Build' });
+    expect(card).not.toHaveTextContent(MUST_SHIP_STATUS_LABELS.planned);
+    expect(within(card).getByRole('link', { name: 'Start' })).toBeInTheDocument();
   });
 
   it('falls back to a build outcome, then to nothing planned with a way to the week', () => {

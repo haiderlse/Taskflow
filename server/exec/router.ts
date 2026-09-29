@@ -9,6 +9,7 @@ import { projectsRouter } from './routes/projects';
 import { weeksRouter } from './routes/weeks';
 import { outcomesRouter } from './routes/outcomes';
 import { mustShipsRouter } from './routes/mustShips';
+import { daysRouter } from './routes/days';
 
 export type ExecRouterOptions = { extend?: (router: Router) => void };
 
@@ -29,6 +30,7 @@ export function createExecRouter(db: Database.Database, options?: ExecRouterOpti
   router.use('/weeks', weeksRouter(db));
   router.use('/outcomes', outcomesRouter(db));
   router.use('/must-ships', mustShipsRouter(db));
+  router.use('/days', daysRouter(db));
   // Test-only hook: registers routes after the router's own, before the 404
   // catch-all and the error handler. Production never passes it.
   options?.extend?.(router);

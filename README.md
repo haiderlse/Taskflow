@@ -32,6 +32,16 @@ Inbox with the keys `T` (this week), `L` (later), `D` (delegate), `S`
 (schedule), `P` (project) and `X` (delete an accidental capture); `j`/`k`
 move the selection.
 
+## Planning the week
+
+Open `/plan` on Sunday (or any day the week has no outcomes). Carry any of
+last week's open outcomes that still matter, then choose up to three for this
+week — each needs a definition of done, and a title that reads like an
+activity ("Work on…", "Look into…") gets a nudge to say what will exist when
+it is finished. A fourth is never added: on `/week`, "Replace an outcome"
+asks which one gives up its slot, and why. Progress on each outcome is set by
+hand on `/week`. Projects live at `/projects`, work and build kept apart.
+
 ## Checks
 
     npm run lint            # TypeScript, strict config (src/, server/, e2e/, root configs)

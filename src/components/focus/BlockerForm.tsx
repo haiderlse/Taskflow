@@ -1,12 +1,12 @@
 import { useId, useState, type FormEvent } from 'react';
 import type { Blocker } from '../../shared/exec/deepWorkSchemas';
 
-type Props = { pending: boolean; onSubmit: (blocker: Blocker) => void; onCancel: () => void };
+type Props = { pending: boolean; submitLabel?: string; onSubmit: (blocker: Blocker) => void; onCancel: () => void };
 
 const FIELD = 'w-full rounded border border-line px-3 py-2 dark:border-ink-muted dark:bg-ink';
 
 /** The three answers a Blocked exit asks for (spec C "Deep Work"): what blocks it, who owns the unblock, the next action. */
-export function BlockerForm({ pending, onSubmit, onCancel }: Props) {
+export function BlockerForm({ pending, submitLabel = 'File the next action and stop', onSubmit, onCancel }: Props) {
   const id = useId();
   const [what, setWhat] = useState('');
   const [owner, setOwner] = useState('');
@@ -27,7 +27,7 @@ export function BlockerForm({ pending, onSubmit, onCancel }: Props) {
       <input id={`${id}-next`} value={nextAction} maxLength={200} onChange={(e) => setNextAction(e.target.value)} className={FIELD} />
       <div className="flex gap-2 pt-1">
         <button type="submit" disabled={!complete || pending} className="rounded bg-ink px-3 py-1.5 text-paper disabled:opacity-40 dark:bg-paper dark:text-ink">
-          File the next action and stop
+          {submitLabel}
         </button>
         <button type="button" onClick={onCancel} className="rounded px-3 py-1.5 text-ink-muted">Cancel</button>
       </div>

@@ -5,12 +5,13 @@ import { GradeToday } from './GradeToday';
 import { renderWithProviders } from '../../test/render';
 import { stubFetch, json, failure } from '../../test/fetch';
 import { makeMustShip } from '../../test/fixtures';
+import type { MustShip } from '../../shared/exec/todaySchemas';
 
 afterEach(() => vi.unstubAllGlobals());
 
 const ship = makeMustShip({ title: 'Delivery tracker sent', date: '2026-09-29' });
 const writes = (calls: { method: string; url: string; body?: unknown }[]) => calls.filter((c) => c.method !== 'GET');
-const render = () => renderWithProviders(<GradeToday next="2026-09-30" mustShip={ship} />);
+const render = (tomorrowMustShip: MustShip | null = null) => renderWithProviders(<GradeToday next="2026-09-30" mustShip={ship} tomorrowMustShip={tomorrowMustShip} />);
 
 describe('GradeToday', () => {
   it('keeps Save disabled until a grade is chosen, then grades Shipped without rolling', async () => {
@@ -37,6 +38,14 @@ describe('GradeToday', () => {
         { method: 'PATCH', url: `/api/exec/must-ships/${ship.id}`, body: { status: 'partial' } },
       ])
     );
+  });
+
+  it('does not roll again when tomorrow already holds the roll of this Must Ship', async () => {
+    const calls = stubFetch(() => json({}));
+    render(makeMustShip({ date: '2026-09-30', rolledFromId: ship.id }));
+    await userEvent.click(screen.getByRole('button', { name: 'Partial' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(writes(calls)).toEqual([{ method: 'PATCH', url: `/api/exec/must-ships/${ship.id}`, body: { status: 'partial' } }]));
   });
 
   it('grades a missed one without rolling when the box is unticked', async () => {

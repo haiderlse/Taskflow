@@ -68,7 +68,7 @@ export default function Shutdown() {
       {tomorrow.isError && <LoadError what="tomorrow" error={tomorrow.error} onRetry={() => void tomorrow.refetch()} />}
       {!loaded && !schedule.isError && !day.isError && !tomorrow.isError && <p className={WAIT}>Loading…</p>}
       {loaded && loaded.today.day?.shutdownAt && <Ready tomorrow={loaded.tomorrow} />}
-      {loaded && !loaded.today.day?.shutdownAt && toGrade && <GradeToday next={next} mustShip={toGrade} />}
+      {loaded && !loaded.today.day?.shutdownAt && toGrade && <GradeToday next={next} mustShip={toGrade} tomorrowMustShip={loaded.tomorrow.mustShip} />}
       {loaded && !loaded.today.day?.shutdownAt && !toGrade && (
         <LaterSteps today={loaded.today} tomorrow={loaded.tomorrow} weekStartDay={weekStartDay} after={after} onAfter={setAfter} closing={shutdown.isPending} onClose={close} />
       )}

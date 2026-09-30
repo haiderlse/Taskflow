@@ -7,7 +7,7 @@ import type { Blocker } from '../../shared/exec/deepWorkSchemas';
 import type { MustShip } from '../../shared/exec/todaySchemas';
 import { BlockerForm } from '../focus/BlockerForm';
 
-type Props = { next: string; mustShip: MustShip };
+type Props = { next: string; mustShip: MustShip; tomorrowMustShip: MustShip | null };
 type Grade = 'shipped' | 'partial' | 'missed' | 'blocked';
 
 const GRADES: { grade: Grade; label: string }[] = [
@@ -21,7 +21,7 @@ const CHOICE =
 const PRIMARY = 'rounded bg-ink px-3 py-1.5 text-paper disabled:opacity-40 dark:bg-paper dark:text-ink';
 
 /** Shutdown step 1 (spec C): grade today's Must Ship. Partial and Missed roll it to the next work day unless unticked. */
-export function GradeToday({ next, mustShip }: Props) {
+export function GradeToday({ next, mustShip, tomorrowMustShip }: Props) {
   const update = useUpdateMustShip();
   const roll = useRollMustShip();
   const block = useBlockMustShip();
@@ -34,7 +34,8 @@ export function GradeToday({ next, mustShip }: Props) {
   // Roll first, then grade: the grade moves Shutdown on to step 2, and a roll must not be left to a step that has gone.
   const save = async () => {
     if (grade === null || grade === 'blocked') return;
-    if (slipped && rollOn) await roll.mutateAsync({ id: mustShip.id, date: next }).catch((error: ApiError) => report(`roll it to ${dayLabel(next)}`)(error));
+    const rolled = tomorrowMustShip?.rolledFromId === mustShip.id; // a retry after a failed grade must not roll twice
+    if (slipped && rollOn && !rolled) await roll.mutateAsync({ id: mustShip.id, date: next }).catch((error: ApiError) => report(`roll it to ${dayLabel(next)}`)(error));
     await update.mutateAsync({ id: mustShip.id, patch: { status: grade } }).catch((error: ApiError) => report('grade the Must Ship')(error));
   };
   const saveBlocked = (blocker: Blocker) => block.mutateAsync({ id: mustShip.id, blocker }).catch((error: ApiError) => report('record the blocker')(error));

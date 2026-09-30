@@ -4,7 +4,9 @@ import { ok, ApiError } from '../http';
 import { nowIso } from '../clock';
 import { getSettings } from '../settings/store';
 import { createMustShip, listMustShips, patchMustShip, rollMustShip } from '../mustShips/store';
+import { blockMustShip } from '../mustShips/block';
 import { mustShipCreateSchema, mustShipPatchSchema, mustShipQuerySchema, mustShipRollSchema } from '../../../src/shared/exec/todaySchemas';
+import { blockerSchema } from '../../../src/shared/exec/deepWorkSchemas';
 
 export function mustShipsRouter(db: Database.Database, clock: () => string = nowIso): Router {
   const router = Router();
@@ -32,6 +34,13 @@ export function mustShipsRouter(db: Database.Database, clock: () => string = now
     const copy = rollMustShip(db, req.params.id, date, clock());
     if (!copy) throw notFound();
     ok(res, copy, 201);
+  });
+
+  router.post('/:id/block', (req, res) => {
+    const blocker = blockerSchema.parse(req.body);
+    const result = blockMustShip(db, req.params.id, blocker, getSettings(db).workDays, clock());
+    if (!result) throw notFound();
+    ok(res, result);
   });
 
   return router;

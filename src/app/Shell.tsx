@@ -22,7 +22,7 @@ export function Shell() {
     <div className="min-h-screen md:flex">
       <nav
         aria-label="Primary"
-        className="fixed inset-x-0 bottom-0 z-10 flex justify-around border-t border-line bg-paper-raised p-2 md:static md:w-44 md:flex-col md:justify-start md:gap-1 md:border-r md:border-t-0 md:p-4 dark:border-ink-muted dark:bg-ink"
+        className="fixed inset-x-0 bottom-0 z-10 flex justify-around border-t border-line bg-paper-raised px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] md:static md:w-44 md:flex-col md:justify-start md:gap-1 md:border-r md:border-t-0 md:p-4 dark:border-ink-muted dark:bg-ink"
       >
         {NAV.map((item) => (
           <NavLink key={item.to} to={item.to} end={item.end} className={linkClass}>
@@ -30,7 +30,7 @@ export function Shell() {
           </NavLink>
         ))}
       </nav>
-      <main className="flex-1 space-y-4 px-4 pb-24 pt-6 md:px-10 md:pb-10">
+      <main className="min-w-0 flex-1 space-y-4 px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-[calc(1.5rem+env(safe-area-inset-top))] md:px-10 md:pb-10 md:pt-6">
         <div className="flex justify-end">
           <Link to="/settings" className="text-sm text-ink-muted hover:text-ink dark:hover:text-paper">Settings</Link>
         </div>

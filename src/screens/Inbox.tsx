@@ -89,7 +89,7 @@ export default function Inbox() {
       {panel?.kind === 'project' && (
         <ProjectPicker task={panel.task} onCancel={close} onPick={(projectId) => patchAndClose(panel.task.id, { projectId, status: 'later' })} />
       )}
-      <p className="text-xs text-ink-muted">T this week · L later · D delegate · S schedule · P project · X delete · j/k move</p>
+      <p className="hidden text-xs text-ink-muted md:block">T this week · L later · D delegate · S schedule · P project · X delete · j/k move</p>
     </section>
   );
 }

@@ -52,14 +52,14 @@ export function WeekGrid({ weekStartDate, blocks, proposals, outcomes, onSelect,
   const days = Array.from({ length: 7 }, (_, offset) => addDays(weekStartDate, offset));
   return (
     <div className="overflow-x-auto">
-      <div className="grid min-w-[44rem] grid-cols-7 gap-1">
+      <div className="grid grid-cols-7 gap-0.5 md:min-w-[44rem] md:gap-1">
         {days.map((date) => (
           <section key={date} aria-label={dayLabel(date)} className="space-y-1">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs uppercase tracking-wide text-ink-muted">{shortDay(date)}</h3>
-              <button type="button" aria-label={`Add a block on ${dayLabel(date)}`} onClick={() => onAdd(date)} className="px-1 text-xs text-ink-muted hover:text-ink">+</button>
+            <div className="flex items-start justify-between gap-0.5">
+              <h3 className="text-[11px] uppercase leading-tight tracking-wide text-ink-muted md:text-xs">{shortDay(date)}</h3>
+              <button type="button" aria-label={`Add a block on ${dayLabel(date)}`} onClick={() => onAdd(date)} className="px-1.5 py-1 text-sm text-ink-muted hover:text-ink">+</button>
             </div>
-            <div className="relative h-[36rem] rounded border border-line dark:border-ink-muted">
+            <div className="relative h-[28rem] rounded border md:h-[36rem] border-line dark:border-ink-muted">
               {blocks.filter((block) => block.date === date).map((block) => {
                 const title = block.outcomeId ? titles.get(block.outcomeId) ?? null : null;
                 return (

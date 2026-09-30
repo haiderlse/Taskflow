@@ -37,7 +37,7 @@ export default function Today() {
           <NoticePrompt />
         </>
       )}
-      <div className="sticky bottom-20 pt-6 md:bottom-6">
+      <div className="sticky bottom-[calc(3.75rem+env(safe-area-inset-bottom))] -mx-4 border-t border-line bg-paper px-4 py-3 md:bottom-0 md:mx-0 md:px-0 dark:border-ink-muted dark:bg-ink">
         <CaptureBar />
       </div>
     </ScreenShell>

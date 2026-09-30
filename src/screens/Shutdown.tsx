@@ -48,8 +48,12 @@ function LaterSteps({ today, tomorrow, weekStartDay, after, onAfter, closing, on
 
 /** Shutdown (spec C, §12): four steps, each saved as it is taken, then "Tomorrow is ready". A reload resumes from the data. */
 export default function Shutdown() {
-  const { today, weekStartDay, ready, settings } = useToday();
+  const { today: now, weekStartDay, ready, settings } = useToday();
   const schedule = useSettings();
+  // The ritual belongs to the day it was opened on: freeze the date once settings are ready, so local midnight does not re-key it.
+  const [opened, setOpened] = useState<string | null>(null);
+  if (ready && opened === null) setOpened(now);
+  const today = opened ?? now;
   const next = settings ? nextWorkDay(today, settings.workDays) : today;
   const day = useDay(today, { enabled: ready });
   const tomorrow = useDay(next, { enabled: ready });

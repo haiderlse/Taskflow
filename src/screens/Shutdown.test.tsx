@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderRoute } from '../test/render';
 import { stubFetch, json, failure } from '../test/fetch';
@@ -104,6 +104,24 @@ describe('/shutdown', () => {
     expect(within(next).getByRole('heading', { name: 'Must Ship for Wednesday 30 September' })).toBeInTheDocument();
     expect(within(next).getByRole('button', { name: 'Set Must Ship' })).toBeInTheDocument();
     expect(within(next).queryByRole('button', { name: 'Continue' })).toBeNull();
+  });
+
+  it('keeps closing the day it was opened on after local midnight passes', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true, now: new Date('2026-09-29T18:59:00Z') });
+    const graded = { ...ship, status: 'shipped' as const };
+    const calls = fakeShutdownApi({
+      today: makeDayView({ date: TODAY, mustShip: graded }),
+      tomorrow: makeDayView({ date: NEXT, mustShip: makeMustShip({ title: 'Price list sent', date: NEXT }) }),
+    });
+    renderRoute('/shutdown');
+    expect(await screen.findByText('Tuesday 29 September')).toBeInTheDocument();
+    await clickWhenEnabled("Next: tomorrow's Must Ship");
+    act(() => { vi.advanceTimersByTime(3 * 60_000); });
+    expect(screen.getByText('Tuesday 29 September')).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('button', { name: 'Continue' }));
+    await clickWhenEnabled('Close the day');
+    await waitFor(() => expect(calls.filter((c) => c.method === 'POST').map((c) => c.url)).toEqual([`/api/exec/days/${TODAY}/shutdown`]));
+    expect(calls.some((c) => c.url.includes('2026-10-01'))).toBe(false);
   });
 
   it('shows "Tomorrow is ready" when the day is already closed', async () => {

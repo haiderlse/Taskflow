@@ -100,4 +100,11 @@ describe('/review', () => {
     expect(await screen.findByText('Could not load the scoreboard: internal server error')).toBeInTheDocument();
     expect(await screen.findByText('Could not load earlier weeks: internal server error')).toBeInTheDocument();
   });
+
+  it('says so when the schedule cannot be read, instead of loading forever', async () => {
+    stubFetch((url) => (url.endsWith('/settings') ? failure(500, 'INTERNAL', 'internal server error') : json([])));
+    renderRoute('/review');
+    expect(await screen.findByText('Could not load the schedule: internal server error')).toBeInTheDocument();
+    expect(screen.queryByText('Loading the week…')).toBeNull();
+  });
 });

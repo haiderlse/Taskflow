@@ -7,6 +7,7 @@ import { ScoreboardCard } from '../components/review/ScoreboardCard';
 import { WeekHistory } from '../components/review/WeekHistory';
 import { useWeekLookup } from '../api/weeks';
 import { useScoreboard } from '../api/review';
+import { useSettings } from '../api/settings';
 import type { ApiError } from '../api/client';
 import { useToday } from '../lib/useToday';
 import { weekNumber, weekRangeLabel } from '../shared/exec/week';
@@ -33,6 +34,7 @@ function SelectedWeek({ board, current, onBack }: SelectedProps) {
 
 /** Review (spec C): what shipped, what slipped, and why. The selected week defaults to the current one. */
 export default function Review() {
+  const settings = useSettings();
   const { today, ready } = useToday();
   const lookup = useWeekLookup(today, { enabled: ready });
   const [picked, setPicked] = useState<string | null>(null);
@@ -41,8 +43,9 @@ export default function Review() {
   const board = useScoreboard(weekId);
   return (
     <ScreenShell title="Review">
+      {settings.isError && <LoadError what="the schedule" error={settings.error} onRetry={() => void settings.refetch()} />}
       {lookup.isError && <LoadError what="the week" error={lookup.error} onRetry={() => void lookup.refetch()} />}
-      {!lookup.isSuccess && !lookup.isError && <p className={WAIT}>Loading the week…</p>}
+      {!lookup.isSuccess && !lookup.isError && !settings.isError && <p className={WAIT}>Loading the week…</p>}
       {lookup.isSuccess && weekId === null && (
         <p>
           This week has no plan yet. <Link to="/plan" className="underline">Plan this week</Link>

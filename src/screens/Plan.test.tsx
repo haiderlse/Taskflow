@@ -135,6 +135,13 @@ describe('/plan', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Could not load the week: internal server error');
   });
 
+  it('says so when the schedule cannot be read instead of loading forever', async () => {
+    stubFetch(() => failure(500, 'INTERNAL', 'internal server error'));
+    renderRoute('/plan');
+    expect(await screen.findByText('Could not load the schedule: internal server error')).toBeInTheDocument();
+    expect(screen.queryByText('Loading the week…')).toBeNull();
+  });
+
   it('lands on the time step when three outcomes are already chosen, and finishes from there', async () => {
     fakePlanApi(makeLookup({ current: makeWeekView([makeOutcome({ title: 'A', slot: 1 }), makeOutcome({ title: 'B', slot: 2 }), makeOutcome({ title: 'C', slot: 3 })]) }));
     renderRoute('/plan');

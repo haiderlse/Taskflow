@@ -150,6 +150,12 @@ describe('/week', () => {
     expect(await screen.findByText('Could not load the week: internal server error')).toBeInTheDocument();
   });
 
+  it('says so when the schedule cannot be read instead of loading forever', async () => {
+    stubFetch(() => failure(500, 'INTERNAL', 'internal server error'));
+    renderRoute('/week');
+    expect(await screen.findByText('Could not load the schedule: internal server error')).toBeInTheDocument();
+  });
+
   it('shows minutes planned and done on each card, and "No time allocated" without a block', async () => {
     const outcomes = three();
     const blocks = [makeBlock({ outcomeId: outcomes[0].id, plannedMinutes: 90, startedAt: '2026-09-22T03:35:00.000Z', endedAt: '2026-09-22T04:15:00.000Z', result: 'progress' })];

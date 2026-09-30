@@ -8,6 +8,7 @@ import { CarryOver } from '../components/plan/CarryOver';
 import { ChooseOutcomes } from '../components/plan/ChooseOutcomes';
 import { useWeekLookup } from '../api/weeks';
 import { useDay } from '../api/days';
+import { useSettings } from '../api/settings';
 import { useToday } from '../lib/useToday';
 import { contextOf, weekNumber, weekRangeLabel } from '../shared/exec/week';
 import { dayLabel, nextWorkDay } from '../shared/exec/today';
@@ -49,6 +50,7 @@ function Planned({ startDate, outcomes, today, settings }: { startDate: string; 
 /** Sunday planning (spec C, §4): carry over, choose, time (deep-work blocks), then the next Must Ship. */
 export default function Plan() {
   const { today, weekStartDay, ready, settings } = useToday();
+  const schedule = useSettings();
   const lookup = useWeekLookup(today, { enabled: ready });
   const [chosenStep, setChosenStep] = useState<Step | null>(null);
   const current = lookup.data?.current ?? null;
@@ -63,8 +65,9 @@ export default function Plan() {
   return (
     <ScreenShell title="Plan the week">
       <p className="text-ink-muted">Week {weekNumber(startDate)} · {weekRangeLabel(startDate)}</p>
+      {schedule.isError && <LoadError what="the schedule" error={schedule.error} onRetry={() => void schedule.refetch()} />}
       {lookup.isError && <LoadError what="the week" error={lookup.error} onRetry={() => void lookup.refetch()} />}
-      {!lookup.isSuccess && !lookup.isError && <p className="text-ink-muted">Loading the week…</p>}
+      {!lookup.isSuccess && !lookup.isError && !schedule.isError && <p className="text-ink-muted">Loading the week…</p>}
       {lookup.isSuccess && step === 'carry' && previous && (
         <CarryOver
           outcomes={carryable}

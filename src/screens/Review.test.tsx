@@ -85,6 +85,24 @@ describe('/review', () => {
     expect(screen.queryByRole('button', { name: 'Back to this week' })).toBeNull();
   });
 
+  it('keeps a way back when the picked week cannot be read', async () => {
+    const broken = () => failure(500, 'INTERNAL', 'internal server error');
+    stubFetch((url) => {
+      if (url.endsWith('/settings')) return json(SETTINGS);
+      if (url.startsWith('/api/exec/weeks?')) return json(makeLookup({ current }));
+      if (url.startsWith('/api/exec/weeks/history')) return json([lastWeek]);
+      if (url.endsWith(`/weeks/${OLDER}/scoreboard`)) return broken();
+      if (url.endsWith('/scoreboard')) return json(thisWeek);
+      if (/\/weeks\/[^/?]+$/.test(url)) return json(current);
+      return json([]);
+    });
+    renderRoute('/review');
+    await userEvent.click(await screen.findByRole('button', { name: /^Week 39/ }));
+    expect(await screen.findByText('Could not load the scoreboard: internal server error')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Back to this week' }));
+    expect(await screen.findByRole('heading', { level: 2, name: 'Week 40 · 27 Sep – 3 Oct' })).toBeInTheDocument();
+  });
+
   it('says when this week has no plan and when there are no earlier weeks', async () => {
     api({ lookup: () => json(makeLookup()), history: () => json([]) });
     renderRoute('/review');

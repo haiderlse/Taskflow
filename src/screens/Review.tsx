@@ -18,17 +18,24 @@ const WAIT = 'text-ink-muted';
 
 type SelectedProps = { board: UseQueryResult<Scoreboard, ApiError>; current: boolean; onBack: () => void };
 
-/** The selected week's heading and numbers, with a way back when it is not the current week. */
-function SelectedWeek({ board, current, onBack }: SelectedProps) {
+/** The selected week's numbers, or why they are not there. */
+function Board({ board }: { board: UseQueryResult<Scoreboard, ApiError> }) {
   if (board.isError) return <LoadError what="the scoreboard" error={board.error} onRetry={() => void board.refetch()} />;
   if (!board.isSuccess) return <p className={WAIT}>Loading the scoreboard…</p>;
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h2 className="text-xl font-medium">Week {weekNumber(board.data.startDate)} · {weekRangeLabel(board.data.startDate)}</h2>
-        {!current && <button type="button" onClick={onBack} className="text-sm underline">Back to this week</button>}
-      </div>
+      <h2 className="text-xl font-medium">Week {weekNumber(board.data.startDate)} · {weekRangeLabel(board.data.startDate)}</h2>
       <ScoreboardCard board={board.data} />
+    </div>
+  );
+}
+
+/** The selected week, with a way back when it is not the current week, whatever state its numbers are in. */
+function SelectedWeek({ board, current, onBack }: SelectedProps) {
+  return (
+    <div className="space-y-3">
+      {!current && <button type="button" onClick={onBack} className="text-sm underline">Back to this week</button>}
+      <Board board={board} />
     </div>
   );
 }

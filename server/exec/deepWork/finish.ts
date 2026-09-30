@@ -1,8 +1,7 @@
 import type Database from 'better-sqlite3';
-import { randomUUID } from 'node:crypto';
-import { insertRow, updateRow } from '../rows';
+import { updateRow } from '../rows';
 import { getMustShip, patchMustShip } from '../mustShips/store';
-import { getTask } from '../tasks/store';
+import { fileHandedOffTask } from '../tasks/file';
 import { getBlock, invalid, pauseFold } from './store';
 import { addDays } from '../../../src/shared/exec/dates';
 import type { Task } from '../../../src/shared/exec/schemas';
@@ -28,25 +27,22 @@ function settleMustShip(db: Database.Database, block: DeepWorkBlock, input: Deep
 
 /** The next action becomes a task waiting on its owner, to follow up the day after the block (spec B, POST /deep-work/:id/finish). */
 function fileBlockerTask(db: Database.Database, block: DeepWorkBlock, mustShip: MustShip | null, blocker: Blocker, now: string): Task {
-  const id = randomUUID();
-  insertRow(db, 'tasks', {
-    id,
-    title: blocker.nextAction,
-    notes: `Blocked: ${blocker.what}`,
-    context: block.context,
-    status: 'waiting',
-    projectId: mustShip?.projectId ?? null,
-    outcomeId: block.outcomeId ?? mustShip?.outcomeId ?? null,
-    mustShipId: mustShip?.id ?? block.mustShipId,
-    ownerName: blocker.owner,
-    followUpDate: addDays(block.date, 1),
-    capturedAt: now,
-    processedAt: now,
-    delegatedAt: now,
-    createdAt: now,
-    updatedAt: now,
-  });
-  return getTask(db, id) as Task;
+  return fileHandedOffTask(
+    db,
+    {
+      title: blocker.nextAction,
+      notes: `Blocked: ${blocker.what}`,
+      context: block.context,
+      status: 'waiting',
+      ownerName: blocker.owner,
+      expectedOutput: null,
+      followUpDate: addDays(block.date, 1),
+      projectId: mustShip?.projectId ?? null,
+      outcomeId: block.outcomeId ?? mustShip?.outcomeId ?? null,
+      mustShipId: mustShip?.id ?? block.mustShipId,
+    },
+    now
+  );
 }
 
 /** Ends a running block, settles its Must Ship and, when blocked, files the waiting task, all or nothing. */

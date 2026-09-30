@@ -57,6 +57,23 @@ describe('OpenItems', () => {
     await waitFor(() => expect(lastWrite(calls)).toMatchObject({ method: 'PATCH', body: { status: 'done' } }));
   });
 
+  it('disables a waiting row while its write is in flight', async () => {
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    stubFetch(async (url, init) => {
+      if (url === `/api/exec/tasks?week=${TODAY}`) return json([]);
+      if (init?.method === 'PATCH') await gate;
+      return json({});
+    });
+    render(makeDayView({ waiting: [quote] }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Received "Venue quote"' }));
+    for (const name of ['Follow up on "Venue quote" tomorrow', 'Received "Venue quote"', 'Kill "Venue quote"']) {
+      await waitFor(() => expect(screen.getByRole('button', { name })).toBeDisabled());
+    }
+    release();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Kill "Venue quote"' })).toBeEnabled());
+  });
+
   it('schedules and delegates through their panels', async () => {
     const calls = api([memo]);
     render(makeDayView());

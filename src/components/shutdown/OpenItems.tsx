@@ -9,7 +9,7 @@ import { OpenRow } from './OpenRow';
 
 type Props = { today: string; next: string; weekStartDay: number; view: DayView; onNext: () => void };
 
-const SMALL = 'rounded border border-line px-2 py-1 text-xs text-ink-muted hover:text-ink dark:border-ink-muted dark:hover:text-paper';
+const SMALL = 'rounded border border-line px-2 py-1 text-xs text-ink-muted hover:text-ink disabled:opacity-40 dark:border-ink-muted dark:hover:text-paper';
 const PRIMARY = 'rounded bg-ink px-3 py-1.5 text-paper disabled:opacity-40 dark:bg-paper dark:text-ink';
 
 /** A delegated or waiting item due for follow-up: follow up tomorrow, mark it received, or kill it. */
@@ -20,9 +20,9 @@ function WaitingRow({ task, next }: { task: Task; next: string }) {
   return (
     <li className="flex flex-wrap items-center gap-2 border-t border-line py-2 dark:border-ink-muted">
       <span className="flex-1">{task.title} — {task.ownerName}</span>
-      <button type="button" aria-label={`Follow up on "${task.title}" tomorrow`} onClick={() => act({ followUpDate: next }, 'move the follow-up')} className={SMALL}>Tomorrow</button>
-      <button type="button" aria-label={`Received "${task.title}"`} onClick={() => act({ status: 'done' }, 'mark it received')} className={SMALL}>Received</button>
-      <button type="button" aria-label={`Kill "${task.title}"`} onClick={() => act({ status: 'killed' }, 'kill it')} className={SMALL}>Kill</button>
+      <button type="button" disabled={update.isPending} aria-label={`Follow up on "${task.title}" tomorrow`} onClick={() => act({ followUpDate: next }, 'move the follow-up')} className={SMALL}>Tomorrow</button>
+      <button type="button" disabled={update.isPending} aria-label={`Received "${task.title}"`} onClick={() => act({ status: 'done' }, 'mark it received')} className={SMALL}>Received</button>
+      <button type="button" disabled={update.isPending} aria-label={`Kill "${task.title}"`} onClick={() => act({ status: 'killed' }, 'kill it')} className={SMALL}>Kill</button>
     </li>
   );
 }

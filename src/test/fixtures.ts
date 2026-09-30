@@ -1,4 +1,5 @@
 import type { DeepWorkBlock, DayView, MustShip } from '../shared/exec/todaySchemas';
+import type { Scoreboard } from '../shared/exec/reviewSchemas';
 import type { Outcome, ProjectSummary, Settings, Task, Week, WeekLookup, WeekView } from '../shared/exec/schemas';
 
 export const SETTINGS: Settings = {
@@ -167,3 +168,18 @@ export function makeBlock(overrides: Partial<DeepWorkBlock> = {}): DeepWorkBlock
     ...overrides,
   };
 }
+
+/** The numbers of the week of 20 Sep 2026, all zero and a strip with no Must Ships, unless overridden. */
+export const makeScoreboard = (overrides: Partial<Scoreboard> = {}): Scoreboard => ({
+  weekId: WEEK_ID,
+  startDate: '2026-09-20',
+  reviewedAt: null,
+  outcomes: { shipped: 0, total: 0 },
+  mustShips: { shipped: 0, total: 0 },
+  deepWorkMinutes: 0,
+  rolledForward: 0,
+  killed: 0,
+  delegated: 0,
+  strip: ['2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24', '2026-09-25'].map((date) => ({ date, status: null })),
+  ...overrides,
+});

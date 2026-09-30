@@ -1,9 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Context } from '../shared/exec/schemas';
 import type { MustShip, MustShipInput, MustShipPatch, MustShipStatus } from '../shared/exec/todaySchemas';
+import type { Blocker } from '../shared/exec/deepWorkSchemas';
+import type { MustShipBlockResult } from '../shared/exec/reviewSchemas';
 import { api, ApiError } from './client';
 import { toQueryString } from './query';
-import { daysKey, mustShipsKey, projectsKey } from './keys';
+import { daysKey, mustShipsKey, projectsKey, tasksKey } from './keys';
 
 export { mustShipsKey };
 
@@ -38,3 +40,12 @@ export const useUpdateMustShip = () =>
 
 export const useRollMustShip = () =>
   useMustShipMutation(({ id, date }: { id: string; date: string }) => api.post<MustShip>(`/must-ships/${id}/roll`, { date }));
+
+/** Shutdown's Blocked: the blocker lands on the Must Ship and a waiting task is filed, so the task lists refresh too. */
+export function useBlockMustShip() {
+  const queryClient = useQueryClient();
+  return useMutation<MustShipBlockResult, ApiError, { id: string; blocker: Blocker }>({
+    mutationFn: ({ id, blocker }) => api.post<MustShipBlockResult>(`/must-ships/${id}/block`, blocker),
+    onSuccess: () => Promise.all([mustShipsKey, daysKey, projectsKey, tasksKey].map((queryKey) => queryClient.invalidateQueries({ queryKey }))),
+  });
+}

@@ -10,6 +10,8 @@ const FRIENDLY: Partial<Record<ApiError['code'], string>> = {
   CONSTRAINT: 'that conflicts with saved data',
   DAY_TAKEN: 'that day already has a Must Ship',
   SLOT_LIMIT: 'a day holds at most two secondary tasks',
+  SHUTDOWN_NOT_READY: "grade today's Must Ship first",
+  REVIEW_NOT_READY: 'grade every outcome first',
 };
 
 export const errorMessage = (error: ApiError): string => FRIENDLY[error.code] ?? error.message;

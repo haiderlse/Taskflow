@@ -107,4 +107,11 @@ describe('/review', () => {
     expect(await screen.findByText('Could not load the schedule: internal server error')).toBeInTheDocument();
     expect(screen.queryByText('Loading the week…')).toBeNull();
   });
+
+  it('runs the Friday review for the selected week', async () => {
+    api();
+    renderRoute('/review');
+    const review = await screen.findByRole('region', { name: 'Friday review' });
+    expect(await within(review).findByRole('form', { name: 'Review "Supplier plan confirmed"' })).toBeInTheDocument();
+  });
 });

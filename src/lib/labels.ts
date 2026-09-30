@@ -1,5 +1,5 @@
 import type { DeepWorkBlock, MustShipStatus } from '../shared/exec/todaySchemas';
-import type { OutcomeCategory, ProjectStatus, ReviewReason } from '../shared/exec/schemas';
+import type { Outcome, OutcomeCategory, ProjectStatus, ReviewReason } from '../shared/exec/schemas';
 
 export const CATEGORY_LABELS: Record<OutcomeCategory, string> = {
   office: 'Office',
@@ -44,4 +44,17 @@ export const BLOCK_RESULT_LABELS: Record<NonNullable<DeepWorkBlock['result']>, s
   progress: 'Made progress',
   blocked: 'Blocked',
   abandoned: 'Abandoned',
+};
+
+export const GRADE_LABELS: Record<NonNullable<Outcome['reviewGrade']>, string> = {
+  done: 'Done',
+  partial: 'Partial',
+  missed: 'Missed',
+};
+
+export const DISPOSITION_LABELS: Record<NonNullable<Outcome['reviewDisposition']>, string> = {
+  roll_forward: 'Roll into next week',
+  reschedule: 'Reschedule',
+  delegate: 'Delegate',
+  kill: 'Kill',
 };

@@ -5,6 +5,7 @@ import { ScreenShell } from '../components/ScreenShell';
 import { LoadError } from '../components/LoadError';
 import { ScoreboardCard } from '../components/review/ScoreboardCard';
 import { WeekHistory } from '../components/review/WeekHistory';
+import { FridayReview } from '../components/review/FridayReview';
 import { useWeekLookup } from '../api/weeks';
 import { useScoreboard } from '../api/review';
 import { useSettings } from '../api/settings';
@@ -52,6 +53,7 @@ export default function Review() {
         </p>
       )}
       {weekId !== null && <SelectedWeek board={board} current={weekId === currentId} onBack={() => setPicked(null)} />}
+      {weekId !== null && <FridayReview weekId={weekId} today={today} />}
       <WeekHistory before={today} enabled={ready} selected={picked} onSelect={setPicked} />
     </ScreenShell>
   );

@@ -3,7 +3,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderRoute } from '../test/render';
 import { stubFetch, json, failure } from '../test/fetch';
-import { SETTINGS, WEEK_ID, makeLookup, makeOutcome, makeWeekView } from '../test/fixtures';
+import { SETTINGS, WEEK_ID, makeLookup, makeOutcome, makeScoreboard, makeWeekView } from '../test/fixtures';
 import type { Outcome, WeekLookup } from '../shared/exec/schemas';
 
 /** A stateful fake: POST /weeks creates the current week, adding and rolling append to it. */
@@ -22,6 +22,7 @@ function fakePlanApi(start: WeekLookup) {
       lookup = { ...lookup, current: current() };
       return json(current(), 201);
     }
+    if (url.endsWith('/scoreboard')) return json(makeScoreboard({ weekId: url.split('/').at(-2) ?? WEEK_ID, outcomes: { shipped: 1, total: 3 } }));
     const slot = current().outcomes.filter((o) => o.slot !== null).length + 1;
     if (url.endsWith('/outcomes')) return append(makeOutcome({ title: JSON.parse(String(init?.body)).title, slot }));
     if (url.endsWith('/roll')) return append(makeOutcome({ title: 'Carried', slot, rolledFromId: url.split('/').at(-2) ?? null }));
@@ -149,5 +150,36 @@ describe('/plan', () => {
     const tuesday = await screen.findByRole('region', { name: 'Tuesday 22 September' });
     expect(within(tuesday).getByRole('button', { name: /08:35, 90 minutes, no outcome, suggested/ })).toBeInTheDocument();
     expect(within(await screen.findByRole('region', { name: 'Monday 21 September' })).getAllByRole('button')).toHaveLength(1);
+  });
+
+  it("shows last week's numbers, and after a Friday review offers only what it rolled forward", async () => {
+    const PREVIOUS = '20000000-0000-4000-8000-000000000002';
+    const rolled = makeOutcome({ title: 'Delivery tracker sent', weekId: PREVIOUS, reviewGrade: 'partial', reviewDisposition: 'roll_forward' });
+    const killed = makeOutcome({ title: 'Price list approved', weekId: PREVIOUS, slot: null, status: 'killed', reviewGrade: 'missed', reviewDisposition: 'kill' });
+    const rescheduled = makeOutcome({ title: 'Venue booked', weekId: PREVIOUS, slot: 2, reviewGrade: 'missed', reviewDisposition: 'reschedule' });
+    const previous = makeWeekView([rolled, killed, rescheduled], { id: PREVIOUS, startDate: '2026-09-13', reviewedAt: '2026-09-18T11:00:00.000Z' });
+    fakePlanApi(makeLookup({ hasHistory: true, previous }));
+    renderRoute('/plan');
+    expect(await screen.findByRole('heading', { level: 2, name: 'Last week' })).toBeInTheDocument();
+    expect(await screen.findByText('Last week: 1 of 3 outcomes · 0 of 0 Must Ships · 0 min deep work')).toBeInTheDocument();
+    expect(screen.getByText("Friday's review rolled these forward. Carry the ones that still matter.")).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Carry "Delivery tracker sent" into this week' })).toBeInTheDocument();
+    expect(screen.queryByText(/Price list approved/)).toBeNull();
+    expect(screen.queryByText(/Venue booked/)).toBeNull();
+  });
+
+  it("says so when last week's numbers cannot be read, and still offers the carry", async () => {
+    const PREVIOUS = '20000000-0000-4000-8000-000000000002';
+    const open = makeOutcome({ title: 'Delivery tracker sent', weekId: PREVIOUS });
+    const lookup = makeLookup({ hasHistory: true, previous: makeWeekView([open], { id: PREVIOUS, startDate: '2026-09-13' }) });
+    stubFetch((url) => {
+      if (url.endsWith('/settings')) return json(SETTINGS);
+      if (url.startsWith('/api/exec/weeks?')) return json(lookup);
+      if (url.endsWith('/scoreboard')) return failure(500, 'INTERNAL', 'internal server error');
+      return json([]);
+    });
+    renderRoute('/plan');
+    expect(await screen.findByRole('alert')).toHaveTextContent("Could not load last week's numbers: internal server error");
+    expect(screen.getByRole('button', { name: 'Carry "Delivery tracker sent" into this week' })).toBeInTheDocument();
   });
 });

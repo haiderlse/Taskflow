@@ -12,6 +12,7 @@ import { useToday } from '../lib/useToday';
 import { contextOf, weekNumber, weekRangeLabel } from '../shared/exec/week';
 import { dayLabel, nextWorkDay } from '../shared/exec/today';
 import { weekStartOf } from '../shared/exec/time';
+import { carryCandidates } from '../shared/exec/review';
 import type { Outcome, Settings } from '../shared/exec/schemas';
 
 type Step = 'carry' | 'choose' | 'time' | 'done';
@@ -53,9 +54,8 @@ export default function Plan() {
   const current = lookup.data?.current ?? null;
   const startDate = current?.week.startDate ?? weekStartOf(today, weekStartDay);
   const slotted = (current?.outcomes ?? []).filter((outcome) => outcome.slot !== null);
-  const carryable = (lookup.data?.previous?.outcomes ?? []).filter(
-    (outcome) => outcome.status === 'active' && outcome.slot !== null && !slotted.some((mine) => mine.rolledFromId === outcome.id)
-  );
+  const previous = lookup.data?.previous ?? null;
+  const carryable = carryCandidates(previous, current?.outcomes ?? []);
   const natural: Step = carryable.length > 0 ? 'carry' : 'choose';
   const step: Step =
     chosenStep === 'done' ? 'done' : chosenStep === 'time' || slotted.length === 3 ? 'time' : chosenStep === 'choose' ? 'choose' : natural;
@@ -65,7 +65,16 @@ export default function Plan() {
       <p className="text-ink-muted">Week {weekNumber(startDate)} · {weekRangeLabel(startDate)}</p>
       {lookup.isError && <LoadError what="the week" error={lookup.error} onRetry={() => void lookup.refetch()} />}
       {!lookup.isSuccess && !lookup.isError && <p className="text-ink-muted">Loading the week…</p>}
-      {lookup.isSuccess && step === 'carry' && <CarryOver outcomes={carryable} today={today} weekId={current?.week.id} onNext={() => setChosenStep('choose')} />}
+      {lookup.isSuccess && step === 'carry' && previous && (
+        <CarryOver
+          outcomes={carryable}
+          today={today}
+          weekId={current?.week.id}
+          previousWeekId={previous.week.id}
+          reviewed={previous.week.reviewedAt !== null}
+          onNext={() => setChosenStep('choose')}
+        />
+      )}
       {lookup.isSuccess && step === 'choose' && <ChooseOutcomes view={current} today={today} weekStartDate={startDate} onDone={() => setChosenStep('time')} />}
       {lookup.isSuccess && step === 'time' && <PlanTime view={current} today={today} weekStartDate={startDate} onDone={() => setChosenStep('done')} />}
       {lookup.isSuccess && step === 'done' && <Planned startDate={startDate} outcomes={slotted} today={today} settings={settings} />}

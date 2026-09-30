@@ -7,6 +7,7 @@ import { OpenItems } from '../components/shutdown/OpenItems';
 import { TomorrowMustShip, TomorrowSecondaries } from '../components/shutdown/TomorrowSteps';
 import { TomorrowCard } from '../components/today/TomorrowCard';
 import { useDay, useShutdown } from '../api/days';
+import { useSettings } from '../api/settings';
 import { useReportError } from '../api/errors';
 import { useToday } from '../lib/useToday';
 import { MUST_SHIP_STATUS_LABELS } from '../lib/labels';
@@ -48,6 +49,7 @@ function LaterSteps({ today, tomorrow, weekStartDay, after, onAfter, closing, on
 /** Shutdown (spec C, §12): four steps, each saved as it is taken, then "Tomorrow is ready". A reload resumes from the data. */
 export default function Shutdown() {
   const { today, weekStartDay, ready, settings } = useToday();
+  const schedule = useSettings();
   const next = settings ? nextWorkDay(today, settings.workDays) : today;
   const day = useDay(today, { enabled: ready });
   const tomorrow = useDay(next, { enabled: ready });
@@ -60,10 +62,11 @@ export default function Shutdown() {
   const close = () => shutdown.mutate(today, { onError: report('close the day') });
   return (
     <ScreenShell title="Shutdown">
-      <p className={WAIT}>{dayLabel(today)}</p>
+      {ready && <p className={WAIT}>{dayLabel(today)}</p>}
+      {schedule.isError && <LoadError what="the schedule" error={schedule.error} onRetry={() => void schedule.refetch()} />}
       {day.isError && <LoadError what="today" error={day.error} onRetry={() => void day.refetch()} />}
       {tomorrow.isError && <LoadError what="tomorrow" error={tomorrow.error} onRetry={() => void tomorrow.refetch()} />}
-      {!loaded && !day.isError && !tomorrow.isError && <p className={WAIT}>Loading…</p>}
+      {!loaded && !schedule.isError && !day.isError && !tomorrow.isError && <p className={WAIT}>Loading…</p>}
       {loaded && loaded.today.day?.shutdownAt && <Ready tomorrow={loaded.tomorrow} />}
       {loaded && !loaded.today.day?.shutdownAt && toGrade && <GradeToday next={next} mustShip={toGrade} />}
       {loaded && !loaded.today.day?.shutdownAt && !toGrade && (

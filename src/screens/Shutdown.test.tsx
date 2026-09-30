@@ -146,4 +146,12 @@ describe('/shutdown', () => {
     expect(await screen.findByText('Could not load today: internal server error')).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'What shipped today?' })).toBeNull();
   });
+
+  it('says so when the schedule cannot be read, instead of loading forever', async () => {
+    at530pm();
+    stubFetch((url) => (url.endsWith('/settings') ? failure(500, 'INTERNAL', 'internal server error') : json([])));
+    renderRoute('/shutdown');
+    expect(await screen.findByText('Could not load the schedule: internal server error')).toBeInTheDocument();
+    expect(screen.queryByText('Loading…')).toBeNull();
+  });
 });

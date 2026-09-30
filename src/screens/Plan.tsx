@@ -5,6 +5,7 @@ import { LoadError } from '../components/LoadError';
 import { MustShipPicker } from '../components/mustShip/MustShipPicker';
 import { PlanTime } from '../components/plan/PlanTime';
 import { CarryOver } from '../components/plan/CarryOver';
+import { LastWeekGlance } from '../components/plan/LastWeekGlance';
 import { ChooseOutcomes } from '../components/plan/ChooseOutcomes';
 import { useWeekLookup } from '../api/weeks';
 import { useDay } from '../api/days';
@@ -78,6 +79,7 @@ export default function Plan() {
           onNext={() => setChosenStep('choose')}
         />
       )}
+      {lookup.isSuccess && step === 'choose' && previous && <LastWeekGlance weekId={previous.week.id} />}
       {lookup.isSuccess && step === 'choose' && <ChooseOutcomes view={current} today={today} weekStartDate={startDate} onDone={() => setChosenStep('time')} />}
       {lookup.isSuccess && step === 'time' && <PlanTime view={current} today={today} weekStartDate={startDate} onDone={() => setChosenStep('done')} />}
       {lookup.isSuccess && step === 'done' && <Planned startDate={startDate} outcomes={slotted} today={today} settings={settings} />}

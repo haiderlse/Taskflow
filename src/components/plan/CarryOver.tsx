@@ -1,19 +1,9 @@
 import { useRollOutcome } from '../../api/weeks';
-import { useScoreboard } from '../../api/review';
 import { useReportError } from '../../api/errors';
-import { scoreLine } from '../../shared/exec/scoreboard';
 import type { Outcome } from '../../shared/exec/schemas';
-import { LoadError } from '../LoadError';
+import { LastWeekGlance } from './LastWeekGlance';
 
 type Props = { outcomes: Outcome[]; today: string; weekId?: string; previousWeekId: string; reviewed: boolean; onNext: () => void };
-
-/** Last week at a glance (spec C "Sunday planning" step 1): its numbers in one line. */
-function LastWeekGlance({ weekId }: { weekId: string }) {
-  const board = useScoreboard(weekId);
-  if (board.isError) return <LoadError what="last week's numbers" error={board.error} onRetry={() => void board.refetch()} />;
-  if (!board.isSuccess) return <p className="text-sm text-ink-muted">Loading last week's numbers…</p>;
-  return <p className="text-sm text-ink-muted">Last week: {scoreLine(board.data)}</p>;
-}
 
 /** Step 1 (§4): last week's numbers, then its outcomes to carry. After a Friday review, only the ones it rolled forward. */
 export function CarryOver({ outcomes, today, weekId, previousWeekId, reviewed, onNext }: Props) {

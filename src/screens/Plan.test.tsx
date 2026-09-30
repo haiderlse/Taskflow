@@ -175,6 +175,17 @@ describe('/plan', () => {
     expect(screen.queryByText(/Venue booked/)).toBeNull();
   });
 
+  it("shows last week's numbers on the choose step when the review rolled nothing", async () => {
+    const PREVIOUS = '20000000-0000-4000-8000-000000000002';
+    const killed = makeOutcome({ title: 'Price list approved', weekId: PREVIOUS, status: 'killed', reviewGrade: 'missed', reviewDisposition: 'kill' });
+    const previous = makeWeekView([killed], { id: PREVIOUS, startDate: '2026-09-13', reviewedAt: '2026-09-18T11:00:00.000Z' });
+    fakePlanApi(makeLookup({ hasHistory: true, previous }));
+    renderRoute('/plan');
+    expect(await screen.findByLabelText('Outcome')).toBeInTheDocument();
+    expect(await screen.findByText('Last week: 1 of 3 outcomes · 0 of 0 Must Ships · 0 min deep work')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 2, name: 'Last week' })).toBeNull();
+  });
+
   it("says so when last week's numbers cannot be read, and still offers the carry", async () => {
     const PREVIOUS = '20000000-0000-4000-8000-000000000002';
     const open = makeOutcome({ title: 'Delivery tracker sent', weekId: PREVIOUS });

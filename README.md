@@ -70,6 +70,25 @@ one to give it an outcome, or add another. Outcomes with no block are flagged
 as having no time. Allow notifications from Today to get a notice five minutes
 before deep work begins.
 
+## Shutdown and review
+
+From the shutdown time in settings, Today shows "Close the day". `/shutdown`
+takes four steps, each saved as you go: grade today's Must Ship (Shipped,
+Partial, Missed or Blocked; Partial and Missed roll it to the next work day
+unless you untick it, and Blocked files the next action as a waiting task);
+deal with whatever is still open (Tomorrow, Schedule, Delegate, Later or Kill
+for each row); set tomorrow's Must Ship; and pick up to two secondaries. The
+day cannot be closed while its Must Ship is still planned. Closing it ends any
+session still running and shows "Tomorrow is ready".
+
+`/review` shows the week's scoreboard (outcomes and Must Ships shipped, deep
+work, rolled, killed and delegated), the strip of the work days' Must Ships,
+and the earlier weeks, each of which opens its own scoreboard. The Friday
+review grades each outcome Done, Partial or Missed; a slipped one takes a
+reason and a decision: roll it into next week, reschedule it to a later week,
+delegate it, or kill it. "Review done" stamps the week, and Sunday's plan then
+offers only the outcomes you rolled forward.
+
 ## Checks
 
     npm run lint            # TypeScript, strict config (src/, server/, e2e/, root configs)
